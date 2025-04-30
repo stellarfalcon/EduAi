@@ -27,8 +27,8 @@ const pool = new pg.Pool({
   port: 5432,
   database: 'postgres',
   user: 'postgres',
-  password: '68NITec@2011',
-  schema: 'edu_platform',
+  password: 'groot',
+  schema: 'public',
 });
 
 // Utility functions

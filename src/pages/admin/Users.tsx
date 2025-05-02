@@ -10,8 +10,8 @@ interface User {
   user_id: number;
   email: string;
   role: string;
-  is_deleted_user: boolean;
-  createdAt: string;
+  user_status: number;
+  created_at: string;
 }
 
 const Users = () => {
@@ -23,17 +23,12 @@ const Users = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        // Mock data for development
-        const mockUsers = [
-          { user_id: 1, email: 'admin@eduplatform.com', role: 'admin', is_deleted_user: false, createdAt: '2025-01-01T10:00:00Z' },
-          { user_id: 2, email: 'teacher1@eduplatform.com', role: 'teacher', is_deleted_user: false, createdAt: '2025-02-01T11:30:00Z' },
-          { user_id: 3, email: 'teacher2@eduplatform.com', role: 'teacher', is_deleted_user: false, createdAt: '2025-02-02T09:15:00Z' },
-          { user_id: 4, email: 'student1@eduplatform.com', role: 'student', is_deleted_user: false, createdAt: '2025-02-10T14:20:00Z' },
-          { user_id: 5, email: 'student2@eduplatform.com', role: 'student', is_deleted_user: false, createdAt: '2025-02-11T10:45:00Z' },
-          { user_id: 6, email: 'student3@eduplatform.com', role: 'student', is_deleted_user: true, createdAt: '2025-02-12T16:30:00Z' },
-        ];
-        
-        setUsers(mockUsers);
+        const response = await axios.get(`${API_URL}/admin/users`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        setUsers(response.data);
         setIsLoading(false);
       } catch (error) {
         console.error('Error fetching users:', error);
@@ -47,12 +42,14 @@ const Users = () => {
 
   const handleDeactivateUser = async (userId: number) => {
     try {
-      // In production this would be an API call
-      // await axios.put(`${API_URL}/admin/users/${userId}/deactivate`);
+      await axios.put(`${API_URL}/admin/users/${userId}/deactivate`, {}, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       
-      // Update local state to reflect the change
       setUsers(users.map(user => 
-        user.user_id === userId ? { ...user, is_deleted_user: true } : user
+        user.user_id === userId ? { ...user, user_status: 0 } : user
       ));
       
       toast.success('User deactivated successfully');
@@ -64,12 +61,14 @@ const Users = () => {
 
   const handleReactivateUser = async (userId: number) => {
     try {
-      // In production this would be an API call
-      // await axios.put(`${API_URL}/admin/users/${userId}/reactivate`);
+      await axios.put(`${API_URL}/admin/users/${userId}/reactivate`, {}, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       
-      // Update local state to reflect the change
       setUsers(users.map(user => 
-        user.user_id === userId ? { ...user, is_deleted_user: false } : user
+        user.user_id === userId ? { ...user, user_status: 1 } : user
       ));
       
       toast.success('User reactivated successfully');
@@ -171,20 +170,20 @@ const Users = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(user.createdAt)}
+                      {formatDate(user.created_at)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.is_deleted_user 
+                        user.user_status === 0 
                           ? 'bg-danger-100 text-danger-800' 
                           : 'bg-success-100 text-success-800'
                       }`}>
-                        {user.is_deleted_user ? 'Inactive' : 'Active'}
+                        {user.user_status === 0 ? 'Inactive' : 'Active'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       {user.role !== 'admin' && (
-                        user.is_deleted_user ? (
+                        user.user_status === 0 ? (
                           <Button 
                             variant="success" 
                             size="sm"
@@ -210,7 +209,7 @@ const Users = () => {
               ) : (
                 <tr>
                   <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
-                    No users found.
+                    No users found
                   </td>
                 </tr>
               )}

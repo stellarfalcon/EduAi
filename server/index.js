@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { WebSocketServer } from 'ws';
 
 // Load environment variables
 dotenv.config();
@@ -30,6 +31,33 @@ const pool = new pg.Pool({
   password: 'groot',
   schema: 'public',
 });
+
+// Create WebSocket server
+const wss = new WebSocketServer({ port: 5001 });
+
+// Store connected admin clients
+const adminClients = new Set();
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/ws/admin') {
+    adminClients.add(ws);
+    
+    ws.on('close', () => {
+      adminClients.delete(ws);
+    });
+  }
+});
+
+// Function to broadcast updates to all admin clients
+const broadcastToAdmins = (data) => {
+  const message = JSON.stringify(data);
+  adminClients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+};
 
 // Utility functions
 const generateToken = (user) => {
@@ -74,14 +102,48 @@ const authorizeRoles = (roles) => {
 // Log activity
 const logActivity = async (userId, role, activityName) => {
   try {
-    await pool.query(
-      'INSERT INTO activities (user_id, role, activity_name) VALUES ($1, $2, $3)',
+    const result = await pool.query(
+      'INSERT INTO activities (user_id, role, activity_name) VALUES ($1, $2, $3) RETURNING *',
       [userId, role, activityName]
     );
+    
+    // Broadcast the new activity to admin clients
+    broadcastToAdmins({
+      type: 'new_activity',
+      activity: result.rows[0]
+    });
+    
+    return result.rows[0];
   } catch (error) {
     console.error('Error logging activity:', error);
   }
 };
+
+// Create events table if it doesn't exist
+const createEventsTable = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS events (
+        event_id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        start_date TIMESTAMP NOT NULL,
+        end_date TIMESTAMP NOT NULL,
+        location VARCHAR(255),
+        event_type VARCHAR(50) NOT NULL,
+        organizer_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Events table created or already exists');
+  } catch (error) {
+    console.error('Error creating events table:', error);
+  }
+};
+
+// Call the function when the server starts
+createEventsTable();
 
 // Auth routes
 app.post('/api/auth/register', async (req, res) => {
@@ -261,7 +323,7 @@ app.put('/api/admin/registration-requests/:id/reject', authenticateUser, authori
 app.get('/api/admin/users', authenticateUser, authorizeRoles(['admin']), async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT * FROM "Users" ORDER BY "createdAt" DESC'
+      'SELECT * FROM users ORDER BY created_at DESC'
     );
     
     return res.json(result.rows);
@@ -277,7 +339,7 @@ app.put('/api/admin/users/:id/deactivate', authenticateUser, authorizeRoles(['ad
   try {
     // Update user status
     await pool.query(
-      'UPDATE school_mgmt.Users SET is_deleted_user = true, "updatedAt" = CURRENT_TIMESTAMP WHERE user_id = $1',
+      'UPDATE users SET user_status = 0, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1',
       [id]
     );
     
@@ -297,7 +359,7 @@ app.put('/api/admin/users/:id/reactivate', authenticateUser, authorizeRoles(['ad
   try {
     // Update user status
     await pool.query(
-      'UPDATE "Users" SET is_deleted_user = false, "updatedAt" = CURRENT_TIMESTAMP WHERE user_id = $1',
+      'UPDATE users SET user_status = 1, updated_at = CURRENT_TIMESTAMP WHERE user_id = $1',
       [id]
     );
     
@@ -417,6 +479,206 @@ app.put('/api/student/assignments/:id/status', authenticateUser, authorizeRoles(
   } catch (error) {
     console.error('Error updating assignment status:', error);
     return res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Admin dashboard endpoints
+app.get('/api/admin/dashboard', authenticateUser, authorizeRoles(['admin']), async (req, res) => {
+  try {
+    // Get total users
+    const totalUsersResult = await pool.query('SELECT COUNT(*) FROM users WHERE user_status = 1');
+    const totalUsers = parseInt(totalUsersResult.rows[0].count);
+
+    // Get active users (users who have logged in within the last 24 hours)
+    const activeUsersResult = await pool.query(`
+      SELECT COUNT(DISTINCT a.user_id) 
+      FROM activities a 
+      JOIN users u ON a.user_id = u.user_id 
+      WHERE a.activity_timestamp > NOW() - INTERVAL '24 hours' 
+      AND u.user_status = 1
+    `);
+    const activeUsers = parseInt(activeUsersResult.rows[0].count);
+
+    // Get total activities
+    const totalActivitiesResult = await pool.query('SELECT COUNT(*) FROM activities');
+    const totalActivities = parseInt(totalActivitiesResult.rows[0].count);
+
+    // Get recent activities with user details
+    const recentActivitiesResult = await pool.query(`
+      SELECT 
+        a.activity_name,
+        a.activity_timestamp,
+        u.email,
+        u.role,
+        up.full_name
+      FROM activities a
+      JOIN users u ON a.user_id = u.user_id
+      LEFT JOIN user_profiles up ON u.user_id = up.user_id
+      ORDER BY a.activity_timestamp DESC
+      LIMIT 10
+    `);
+
+    // Get user growth data (last 7 days) from users table
+    const userGrowthResult = await pool.query(`
+      SELECT 
+        DATE(created_at) as date,
+        SUM(CASE WHEN role = 'student' THEN 1 ELSE 0 END) as student_count,
+        SUM(CASE WHEN role = 'teacher' THEN 1 ELSE 0 END) as teacher_count
+      FROM users
+      WHERE created_at >= NOW() - INTERVAL '7 days'
+        AND user_status = 1
+      GROUP BY DATE(created_at)
+      ORDER BY date
+    `);
+
+    // Fill in missing days with 0s
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (6 - i)); // oldest to newest
+      return date.toISOString().split('T')[0];
+    });
+
+    const userGrowthData = last7Days.map(date => {
+      const row = userGrowthResult.rows.find(r => {
+        return (typeof r.date === 'string' ? r.date : r.date.toISOString().split('T')[0]) === date;
+      });
+      return {
+        date,
+        student_count: row ? Number(row.student_count) : 0,
+        teacher_count: row ? Number(row.teacher_count) : 0
+      };
+    });
+
+    // Get user role distribution
+    const userDistributionResult = await pool.query(`
+      SELECT 
+        role,
+        CAST(COUNT(*) AS INTEGER) as value
+      FROM users
+      WHERE user_status = 1
+      GROUP BY role
+    `);
+    
+    // Get pending requests
+    const pendingRequestsResult = await pool.query(`
+      SELECT 
+        ur.id,
+        ur.request_type,
+        ur.request_details,
+        ur.request_date,
+        u.email,
+        up.full_name
+      FROM user_requests ur
+      JOIN users u ON ur.user_id = u.user_id
+      LEFT JOIN user_profiles up ON u.user_id = up.user_id
+      WHERE ur.status = 'pending'
+      ORDER BY ur.request_date DESC
+      LIMIT 5
+    `);
+
+    // Get registration request status distribution
+    const requestStatusResult = await pool.query(`
+      SELECT 
+        COALESCE(status, 'pending') as status,
+        CAST(COUNT(*) AS INTEGER) as value
+      FROM registration_requests
+      GROUP BY status
+    `);
+
+    // Get recent assignments
+    const recentAssignmentsResult = await pool.query(`
+      SELECT 
+        a.assignment_id,
+        a.title,
+        a.due_date,
+        c.class_name,
+        co.course_name,
+        u.email as teacher_email,
+        up.full_name as teacher_name,
+        COUNT(sas.id) as total_students,
+        COUNT(CASE WHEN sas.status = 'Completed' THEN 1 END) as completed_count
+      FROM assignments a
+      JOIN class_courses cc ON a.class_course_id = cc.id
+      JOIN classes c ON cc.class_id = c.class_id
+      JOIN courses co ON cc.course_id = co.course_id
+      JOIN users u ON a.created_by_teacher_id = u.user_id
+      LEFT JOIN user_profiles up ON u.user_id = up.user_id
+      LEFT JOIN student_assignment_status sas ON a.assignment_id = sas.assignment_id
+      GROUP BY a.assignment_id, a.title, a.due_date, c.class_name, co.course_name, u.email, up.full_name
+      ORDER BY a.created_at DESC
+      LIMIT 5
+    `);
+
+    // Get upcoming events
+    const upcomingEventsResult = await pool.query(`
+      SELECT 
+        e.event_id,
+        e.title,
+        e.description,
+        e.event_date as start_date,
+        e.event_date as end_date,
+        NULL as location,
+        'General' as event_type,
+        'System' as organizer
+      FROM events e
+      WHERE e.event_date > NOW()
+      ORDER BY e.event_date ASC
+      LIMIT 5
+    `);
+
+    const responseData = {
+      totalUsers,
+      activeUsers,
+      totalActivities,
+      recentActivities: recentActivitiesResult.rows,
+      userGrowth: userGrowthData,
+      userDistribution: userDistributionResult.rows,
+      pendingRequests: pendingRequestsResult.rows,
+      requestStatusDistribution: requestStatusResult.rows,
+      recentAssignments: recentAssignmentsResult.rows,
+      upcomingEvents: upcomingEventsResult.rows
+    };
+
+    console.log('Sending dashboard response:', responseData);
+    res.json(responseData);
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error);
+    res.status(500).json({ message: 'Error fetching dashboard data' });
+  }
+});
+
+// Add event creation endpoint
+app.post('/api/admin/events', authenticateUser, authorizeRoles(['admin']), async (req, res) => {
+  const { title, description, start_date, end_date, location, event_type } = req.body;
+  
+  if (!title || !start_date || !end_date || !event_type) {
+    return res.status(400).json({ message: 'Missing required fields' });
+  }
+
+  try {
+    const result = await pool.query(`
+      INSERT INTO events (
+        title,
+        description,
+        start_date,
+        end_date,
+        location,
+        event_type,
+        organizer_id
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `, [title, description, start_date, end_date, location, event_type, req.user.userId]);
+
+    // Broadcast the new event to admin clients
+    broadcastToAdmins({
+      type: 'new_event',
+      event: result.rows[0]
+    });
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating event:', error);
+    res.status(500).json({ message: 'Error creating event' });
   }
 });
 

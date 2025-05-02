@@ -24,16 +24,12 @@ const RegistrationRequests = () => {
   useEffect(() => {
     const fetchRegistrationRequests = async () => {
       try {
-        // Mock data for development
-        const mockRequests = [
-          { id: 1, username: 'john.doe@example.com', role: 'teacher', created_at: '2025-03-01T14:23:45Z', status: 'pending' },
-          { id: 2, username: 'jane.smith@example.com', role: 'student', created_at: '2025-03-02T09:15:30Z', status: 'pending' },
-          { id: 3, username: 'alice.brown@example.com', role: 'teacher', created_at: '2025-03-02T16:45:12Z', status: 'approved' },
-          { id: 4, username: 'bob.wilson@example.com', role: 'student', created_at: '2025-03-03T10:10:22Z', status: 'rejected' },
-          { id: 5, username: 'emma.clark@example.com', role: 'student', created_at: '2025-03-04T08:30:15Z', status: 'pending' },
-        ];
-        
-        setRequests(mockRequests);
+        const response = await axios.get(`${API_URL}/admin/registration-requests`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        setRequests(response.data);
         setIsLoading(false);
       } catch (error) {
         console.error('Error fetching registration requests:', error);
@@ -47,10 +43,12 @@ const RegistrationRequests = () => {
 
   const handleApprove = async (id: number) => {
     try {
-      // In production this would be an API call
-      // await axios.put(`${API_URL}/admin/registration-requests/${id}/approve`);
+      await axios.put(`${API_URL}/admin/registration-requests/${id}/approve`, {}, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       
-      // Update local state to reflect the change
       setRequests(requests.map(request => 
         request.id === id ? { ...request, status: 'approved' } : request
       ));
@@ -64,10 +62,12 @@ const RegistrationRequests = () => {
 
   const handleReject = async (id: number) => {
     try {
-      // In production this would be an API call
-      // await axios.put(`${API_URL}/admin/registration-requests/${id}/reject`);
+      await axios.put(`${API_URL}/admin/registration-requests/${id}/reject`, {}, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       
-      // Update local state to reflect the change
       setRequests(requests.map(request => 
         request.id === id ? { ...request, status: 'rejected' } : request
       ));
@@ -209,7 +209,7 @@ const RegistrationRequests = () => {
               ) : (
                 <tr>
                   <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
-                    No registration requests found.
+                    No registration requests found
                   </td>
                 </tr>
               )}

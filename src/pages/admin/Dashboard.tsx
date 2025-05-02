@@ -1,302 +1,275 @@
-import { useState, useEffect } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
+import AuthContext from '../../context/AuthContext';
+import PieChart from '../../components/charts/PieChart';
+import BarChart from '../../components/charts/BarChart';
 import Card from '../../components/ui/Card';
-import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, BarElement } from 'chart.js';
-import { Doughnut, Line, Bar } from 'react-chartjs-2';
-import axios from 'axios';
-import { API_URL } from '../../config/constants';
-import { Users, GraduationCap, CalendarClock, Activity } from 'lucide-react';
+import Button from '../../components/ui/Button';
 
-// Register ChartJS components
-ChartJS.register(ArcElement, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
-
-interface StatsData {
-  totalStudents: number;
-  totalTeachers: number;
-  pendingRequests: number;
-  averageAttendance: number;
+interface DashboardStats {
+  totalUsers: number;
+  activeUsers: number;
+  totalActivities: number;
+  recentActivities: Array<{
+    activity_name: string;
+    activity_timestamp: string;
+    email: string;
+    role: string;
+    full_name: string;
+  }>;
+  userGrowth: Array<{
+    date: string;
+    student_count: string;
+    teacher_count: string;
+  }>;
+  userDistribution: Array<{
+    role: string;
+    value: number;
+  }>;
+  requestStatusDistribution: Array<{
+    status: string;
+    value: number;
+  }>;
+  pendingRequests: Array<{
+    id: number;
+    request_type: number;
+    request_details: string;
+    request_date: string;
+    email: string;
+    full_name: string;
+  }>;
+  recentAssignments: Array<{
+    assignment_id: number;
+    title: string;
+    due_date: string;
+    class_name: string;
+    course_name: string;
+    teacher_email: string;
+    teacher_name: string;
+    total_students: number;
+    completed_count: number;
+  }>;
+  upcomingEvents: Array<{
+    event_id: number;
+    title: string;
+    description: string;
+    start_date: string;
+    end_date: string;
+    location: string;
+    event_type: string;
+    organizer: string;
+  }>;
 }
 
-interface ActivityData {
-  date: string;
-  count: number;
-}
-
-const AdminDashboard = () => {
-  const [statsData, setStatsData] = useState<StatsData>({
-    totalStudents: 0,
-    totalTeachers: 0,
-    pendingRequests: 0,
-    averageAttendance: 0,
+const AdminDashboard: React.FC = () => {
+  const { user } = useContext(AuthContext);
+  const [stats, setStats] = useState<DashboardStats>({
+    totalUsers: 0,
+    activeUsers: 0,
+    totalActivities: 0,
+    recentActivities: [],
+    userGrowth: [],
+    userDistribution: [],
+    requestStatusDistribution: [],
+    pendingRequests: [],
+    recentAssignments: [],
+    upcomingEvents: []
   });
-  
-  const [recentActivities, setRecentActivities] = useState<any[]>([]);
-  const [activityData, setActivityData] = useState<ActivityData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        // In a real application, these would be actual API calls
-        // For demo purposes, we're using mock data
-
-        // Mock stats data
-        setStatsData({
-          totalStudents: 324,
-          totalTeachers: 42,
-          pendingRequests: 8,
-          averageAttendance: 87,
+        const response = await fetch('/api/admin/dashboard', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
         });
-
-        // Mock recent activities
-        setRecentActivities([
-          { id: 1, user: 'John Doe', role: 'teacher', activity: 'login', timestamp: '2025-03-04T10:23:45Z' },
-          { id: 2, user: 'Jane Smith', role: 'student', activity: 'submit_assignment', timestamp: '2025-03-04T09:45:12Z' },
-          { id: 3, user: 'Alice Brown', role: 'teacher', activity: 'create_assignment', timestamp: '2025-03-04T08:30:22Z' },
-          { id: 4, user: 'Bob Wilson', role: 'student', activity: 'use_ai_tool', timestamp: '2025-03-04T08:15:38Z' },
-          { id: 5, user: 'Eva Green', role: 'student', activity: 'login', timestamp: '2025-03-04T07:55:19Z' },
-        ]);
-
-        // Mock activity data for the last 7 days
-        const lastWeekData = Array.from({ length: 7 }, (_, i) => {
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          return {
-            date: date.toISOString().split('T')[0],
-            count: Math.floor(Math.random() * 50) + 20,
-          };
-        }).reverse();
         
-        setActivityData(lastWeekData);
-        setIsLoading(false);
+        if (!response.ok) {
+          throw new Error('Failed to fetch dashboard data');
+        }
+        
+        const data = await response.json();
+        console.log('Dashboard data:', data);
+        console.log('User distribution:', data.userDistribution);
+        setStats(data);
+        setError(null);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
-        setIsLoading(false);
+        setError('Failed to load dashboard data. Please try again later.');
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchDashboardData();
+
+    // Set up WebSocket connection for real-time updates
+    const ws = new WebSocket('ws://localhost:5001/ws/admin');
+    
+    ws.onmessage = (event) => {
+      try {
+        const update = JSON.parse(event.data);
+        if (update.type === 'new_activity') {
+          setStats(prev => ({
+            ...prev,
+            recentActivities: [update.activity, ...(prev.recentActivities || []).slice(0, 9)],
+            totalActivities: (prev.totalActivities || 0) + 1
+          }));
+        } else if (update.type === 'new_event') {
+          setStats(prev => ({
+            ...prev,
+            upcomingEvents: [update.event, ...(prev.upcomingEvents || []).slice(0, 4)]
+          }));
+        }
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+      }
+    };
+
+    return () => {
+      ws.close();
+    };
   }, []);
 
-  // Chart data
-  const userDistributionData = {
-    labels: ['Students', 'Teachers', 'Admins'],
-    datasets: [
-      {
-        data: [statsData.totalStudents, statsData.totalTeachers, 3],
-        backgroundColor: ['#3B82F6', '#10B981', '#F59E0B'],
-        borderColor: ['#2563EB', '#059669', '#D97706'],
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  const activityChartData = {
-    labels: activityData.map(item => item.date),
-    datasets: [
-      {
-        label: 'Daily Activities',
-        data: activityData.map(item => item.count),
-        borderColor: '#3B82F6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.4,
-        fill: true,
-      },
-    ],
-  };
-
-  const toolUsageData = {
-    labels: ['Lesson Planner', 'Quiz Generator', 'Content Summarizer', 'AI Writing', 'Problem Solver'],
-    datasets: [
-      {
-        label: 'Usage Count',
-        data: [65, 42, 73, 31, 49],
-        backgroundColor: [
-          'rgba(59, 130, 246, 0.7)',
-          'rgba(16, 185, 129, 0.7)',
-          'rgba(245, 158, 11, 0.7)',
-          'rgba(239, 68, 68, 0.7)',
-          'rgba(139, 92, 246, 0.7)',
-        ],
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  // Format timestamp
-  const formatDate = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleString();
-  };
-
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-pulse-slow">Loading dashboard data...</div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-pulse text-lg text-gray-600">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-red-600">{error}</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <h1 className="text-2xl font-bold text-gray-800">Admin Dashboard</h1>
+    <div className="container mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="bg-gradient-to-r from-primary-500 to-primary-600 text-white">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-white/20 mr-4">
-              <Users size={24} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-white/80">Total Students</p>
-              <h3 className="text-2xl font-bold">{statsData.totalStudents}</h3>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-4 mb-6">
+        <Card title="Total Users">
+          <p className="text-2xl font-bold">{stats.totalUsers || 0}</p>
         </Card>
         
-        <Card className="bg-gradient-to-r from-secondary-500 to-secondary-600 text-white">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-white/20 mr-4">
-              <GraduationCap size={24} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-white/80">Total Teachers</p>
-              <h3 className="text-2xl font-bold">{statsData.totalTeachers}</h3>
-            </div>
-          </div>
+        <Card title="Active Users">
+          <p className="text-2xl font-bold">{stats.activeUsers || 0}</p>
         </Card>
         
-        <Card className="bg-gradient-to-r from-warning-500 to-warning-600 text-white">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-white/20 mr-4">
-              <Users size={24} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-white/80">Pending Requests</p>
-              <h3 className="text-2xl font-bold">{statsData.pendingRequests}</h3>
-            </div>
+        <Card title="Total Activities">
+          <p className="text-2xl font-bold">{stats.totalActivities || 0}</p>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <Card title="User Growth">
+          <div className="h-[400px] w-full">
+            {stats.userGrowth && stats.userGrowth.length > 0 ? (
+              <BarChart
+                data={stats.userGrowth.map(item => {
+                  console.log('Processing growth item:', item);
+                  const processedItem = {
+                    date: new Date(item.date).toLocaleDateString('en-US', { 
+                      month: 'short',
+                      day: 'numeric'
+                    }),
+                    Students: Number(item.student_count) || 0,
+                    Teachers: Number(item.teacher_count) || 0
+                  };
+                  console.log('Processed item:', processedItem);
+                  return processedItem;
+                })}
+                keys={['Students', 'Teachers']}
+                indexBy="date"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                No growth data available
+              </div>
+            )}
           </div>
         </Card>
-        
-        <Card className="bg-gradient-to-r from-success-500 to-success-600 text-white">
-          <div className="flex items-center">
-            <div className="p-3 rounded-full bg-white/20 mr-4">
-              <CalendarClock size={24} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-white/80">Avg. Attendance</p>
-              <h3 className="text-2xl font-bold">{statsData.averageAttendance}%</h3>
-            </div>
+
+        <Card title="User Distribution" className="bg-white">
+          <div className="h-[400px] w-full">
+            {stats.userDistribution && stats.userDistribution.length > 0 ? (
+              <PieChart 
+                data={stats.userDistribution.map(item => ({
+                  name: item.role.charAt(0).toUpperCase() + item.role.slice(1),
+                  value: item.value
+                }))} 
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                No user data available
+              </div>
+            )}
           </div>
         </Card>
       </div>
-      
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="User Distribution">
-          <div className="flex justify-center items-center h-64">
-            <Doughnut 
-              data={userDistributionData} 
-              options={{
-                plugins: {
-                  legend: {
-                    position: 'bottom',
-                  },
-                },
-                cutout: '65%',
-              }}
-            />
-          </div>
-        </Card>
-        
-        <Card title="Activity Trends (Last 7 Days)">
-          <div className="h-64">
-            <Line 
-              data={activityChartData}
-              options={{
-                plugins: {
-                  legend: {
-                    display: false,
-                  },
-                },
-                scales: {
-                  x: {
-                    grid: {
-                      display: false,
-                    },
-                  },
-                  y: {
-                    beginAtZero: true,
-                  },
-                },
-                maintainAspectRatio: false,
-              }}
-            />
-          </div>
-        </Card>
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card 
-          title={
-            <div className="flex items-center">
-              <Activity size={18} className="text-primary-500 mr-2" />
-              <span>Recent Activities</span>
-            </div>
-          }
-          className="lg:col-span-1"
-        >
-          <div className="space-y-4 h-96 overflow-y-auto">
-            {recentActivities.map((activity) => (
-              <div key={activity.id} className="flex items-start border-b border-gray-100 pb-3">
-                <div className={`w-2 h-2 rounded-full mt-2 mr-3 ${
-                  activity.role === 'teacher' ? 'bg-secondary-500' : 
-                  activity.role === 'student' ? 'bg-primary-500' : 'bg-warning-500'
-                }`}></div>
-                <div className="flex-1">
-                  <div className="flex justify-between">
-                    <p className="text-sm font-medium text-gray-800">{activity.user}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      activity.role === 'teacher' ? 'bg-secondary-100 text-secondary-800' : 
-                      activity.role === 'student' ? 'bg-primary-100 text-primary-800' : 'bg-warning-100 text-warning-800'
-                    }`}>
-                      {activity.role}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">{formatDate(activity.timestamp)}</p>
-                  <p className="text-sm mt-1">
-                    {activity.activity === 'login' && 'Logged into the system'}
-                    {activity.activity === 'submit_assignment' && 'Submitted an assignment'}
-                    {activity.activity === 'create_assignment' && 'Created a new assignment'}
-                    {activity.activity === 'use_ai_tool' && 'Used an AI tool'}
+        <Card title="Recent Activities">
+          <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+            {(stats.recentActivities || []).map((activity, index) => (
+              <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <p className="font-medium">{activity.activity_name}</p>
+                  <p className="text-sm text-gray-500">
+                    {activity.full_name || activity.email} ({activity.role})
                   </p>
                 </div>
+                <p className="text-sm text-gray-500">
+                  {new Date(activity.activity_timestamp).toLocaleString()}
+                </p>
               </div>
             ))}
+            {(!stats.recentActivities || stats.recentActivities.length === 0) && (
+              <p className="text-center text-gray-500 py-4">No recent activities</p>
+            )}
           </div>
         </Card>
-        
-        <Card title="AI Tool Usage" className="lg:col-span-2">
-          <div className="h-96">
-            <Bar 
-              data={toolUsageData}
-              options={{
-                plugins: {
-                  legend: {
-                    display: false,
-                  },
-                },
-                scales: {
-                  x: {
-                    grid: {
-                      display: false,
-                    },
-                  },
-                  y: {
-                    beginAtZero: true,
-                  },
-                },
-                maintainAspectRatio: false,
-              }}
-            />
+
+        <Card title="Upcoming Events">
+          <div className="space-y-4">
+            {(stats.upcomingEvents || []).map((event, index) => (
+              <div key={index} className="flex flex-col p-4 border rounded-lg">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium">{event.title}</p>
+                    <p className="text-sm text-gray-500">{event.description}</p>
+                    <p className="text-sm text-gray-500 mt-1">
+                      <span className="font-medium">Type:</span> {event.event_type}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      <span className="font-medium">Organizer:</span> {event.organizer}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-500">
+                      {new Date(event.start_date).toLocaleDateString()}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {new Date(event.start_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                </div>
+                {event.location && (
+                  <p className="text-sm text-gray-500 mt-2">
+                    <span className="font-medium">Location:</span> {event.location}
+                  </p>
+                )}
+              </div>
+            ))}
+            {(!stats.upcomingEvents || stats.upcomingEvents.length === 0) && (
+              <p className="text-center text-gray-500 py-4">No upcoming events</p>
+            )}
           </div>
         </Card>
       </div>

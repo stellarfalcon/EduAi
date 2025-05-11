@@ -6,6 +6,7 @@ import axios from 'axios';
 import { API_URL } from '../../config/constants';
 import { BookOpen, CheckSquare, Calendar, Award, Clock } from 'lucide-react';
 import Button from '../../components/ui/Button';
+import { toast } from 'react-toastify';
 
 // Register ChartJS components
 ChartJS.register(ArcElement, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title, Tooltip, Legend);
@@ -14,7 +15,7 @@ interface StatsData {
   enrolledCourses: number;
   completedAssignments: number;
   attendance: number;
-  averageGrade: number;
+  assignmentCompletionRate: number;
 }
 
 interface CourseData {
@@ -45,7 +46,7 @@ const StudentDashboard = () => {
     enrolledCourses: 0,
     completedAssignments: 0,
     attendance: 0,
-    averageGrade: 0,
+    assignmentCompletionRate: 0,
   });
   
   const [courses, setCourses] = useState<CourseData[]>([]);
@@ -57,48 +58,37 @@ const StudentDashboard = () => {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        // Mock data for development
-        setStatsData({
-          enrolledCourses: 5,
-          completedAssignments: 32,
-          attendance: 95,
-          averageGrade: 87,
+        // Fetch student stats
+        const statsResponse = await axios.get(`${API_URL}/student/dashboard/stats`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
         });
+        setStatsData(statsResponse.data);
 
-        // Mock course data
-        const mockCourses = [
-          { id: 1, name: 'Biology', teacherName: 'Dr. Smith', progress: 78 },
-          { id: 2, name: 'Mathematics', teacherName: 'Mr. Johnson', progress: 92 },
-          { id: 3, name: 'History', teacherName: 'Ms. Brown', progress: 65 },
-          { id: 4, name: 'English Literature', teacherName: 'Mrs. Davis', progress: 88 },
-          { id: 5, name: 'Physics', teacherName: 'Dr. Wilson', progress: 55 },
-        ];
-        
-        setCourses(mockCourses);
+        // Fetch enrolled courses
+        const coursesResponse = await axios.get(`${API_URL}/student/courses`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        setCourses(coursesResponse.data);
 
-        // Mock assignments data
-        const mockAssignments = [
-          { id: 1, title: 'Biology Report: Cellular Respiration', courseName: 'Biology', dueDate: '2025-03-10', status: 'In Progress' },
-          { id: 2, title: 'Math Problem Set: Quadratic Equations', courseName: 'Mathematics', dueDate: '2025-03-12', status: 'Not Started' },
-          { id: 3, title: 'Historical Analysis Essay', courseName: 'History', dueDate: '2025-03-15', status: 'Not Started' },
-          { id: 4, title: 'Physics Lab: Force and Motion', courseName: 'Physics', dueDate: '2025-03-18', status: 'Not Started' },
-        ];
-        
-        setUpcomingAssignments(mockAssignments);
+        // Fetch upcoming assignments
+        const assignmentsResponse = await axios.get(`${API_URL}/student/assignments/upcoming`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        setUpcomingAssignments(assignmentsResponse.data);
 
-        // Mock attendance history
-        const mockAttendanceHistory = {
-          'Week 1': 100,
-          'Week 2': 100,
-          'Week 3': 80,
-          'Week 4': 100,
-          'Week 5': 100,
-          'Week 6': 80,
-          'Week 7': 100,
-          'Week 8': 100,
-        };
-        
-        setAttendanceHistory(mockAttendanceHistory);
+        // Fetch attendance history
+        const attendanceResponse = await axios.get(`${API_URL}/student/attendance/history`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        setAttendanceHistory(attendanceResponse.data);
         
         // Fetch upcoming events
         const eventsResponse = await axios.get(`${API_URL}/events/upcoming`, {
@@ -111,6 +101,7 @@ const StudentDashboard = () => {
         setIsLoading(false);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
+        toast.error('Failed to load dashboard data');
         setIsLoading(false);
       }
     };
@@ -251,8 +242,8 @@ const StudentDashboard = () => {
               <Award size={24} />
             </div>
             <div>
-              <p className="text-sm font-medium text-white/80">Average Grade</p>
-              <h3 className="text-2xl font-bold">{statsData.averageGrade}%</h3>
+              <p className="text-sm font-medium text-white/80">Assignment Completion Rate</p>
+              <h3 className="text-2xl font-bold">{statsData.assignmentCompletionRate}%</h3>
             </div>
           </div>
         </Card>

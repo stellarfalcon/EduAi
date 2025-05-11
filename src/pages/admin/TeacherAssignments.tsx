@@ -41,8 +41,8 @@ const TeacherAssignments = () => {
   const [form, setForm] = useState<Record<number, { classId: string; courseId: string; startDate: string; endDate: string }>>({});
   const [editAssignment, setEditAssignment] = useState<{ [id: number]: Partial<Assignment> }>({});
 
-  // Debug log: log assignments state on every render
-  console.log('Assignments state in render:', assignments);
+  // Debug log: log teachers state on every render
+  console.log('Teachers state in render:', teachers);
 
   const fetchAssignments = async () => {
     try {
@@ -70,7 +70,9 @@ const TeacherAssignments = () => {
         const usersRes = await axios.get(`${API_URL}/admin/users`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
-        const teachers = usersRes.data.filter((u: any) => u.role === 'teacher');
+        console.log('Fetched users:', usersRes.data); // Debug log
+        const teachers = usersRes.data.filter((u: any) => u.role === 'teacher' && (u.user_status === 1 || u.user_status === '1'));
+        console.log('Teachers array after filter:', teachers); // Debug log
         setTeachers(teachers);
 
         // Fetch all classes

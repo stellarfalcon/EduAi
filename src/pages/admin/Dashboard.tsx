@@ -40,7 +40,8 @@ interface User {
 
 interface ActivityData {
   date: string;
-  count: number;
+  teachers: number;
+  students: number;
 }
 
 interface Activity {
@@ -94,14 +95,24 @@ const AdminDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState<Date>(new Date());
   const [isActivitiesLoading, setIsActivitiesLoading] = useState(true);
+  const [activityFilter, setActivityFilter] = useState({
+    role: 'all',
+    classId: '',
+    userId: ''
+  });
+  const [teacherAssignments, setTeacherAssignments] = useState<any[]>([]);
 
   const fetchRecentActivities = useCallback(async () => {
+    console.log('Fetching activities', activityFilter);
     try {
       setIsActivitiesLoading(true);
+      const params: { [key: string]: any } = {};
+      if (activityFilter.role && activityFilter.role !== 'all') params.role = activityFilter.role;
+      if (activityFilter.classId) params.classId = activityFilter.classId;
+      if (activityFilter.userId) params.userId = activityFilter.userId;
       const activitiesResponse = await axios.get(`${API_URL}/admin/dashboard/activities`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        params
       });
       setRecentActivities(activitiesResponse.data);
       setLastRefreshTime(new Date());
@@ -111,7 +122,7 @@ const AdminDashboard = () => {
     } finally {
       setIsActivitiesLoading(false);
     }
-  }, []);
+  }, [activityFilter]);
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -173,6 +184,12 @@ const AdminDashboard = () => {
       });
       setUpcomingEvents(eventsResponse.data);
 
+      // Fetch teacher assignments
+      const teacherAssignmentsResponse = await axios.get(`${API_URL}/admin/teacher-assignments`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      setTeacherAssignments(teacherAssignmentsResponse.data);
+
       setIsLoading(false);
     } catch (error: any) {
       console.error('Error fetching dashboard data:', error);
@@ -208,28 +225,23 @@ const AdminDashboard = () => {
     fetchFilteredAttendance();
   }, [attendanceFilter]);
 
-  // Initial load of activities
   useEffect(() => {
     fetchRecentActivities();
   }, [fetchRecentActivities]);
 
-  // Polling effect for recent activities
   useEffect(() => {
     const pollInterval = setInterval(() => {
       fetchRecentActivities();
-    }, 30000); // Poll every 30 seconds
-
+    }, 30000);
     return () => clearInterval(pollInterval);
   }, [fetchRecentActivities]);
 
-  // Visibility change handler
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         fetchRecentActivities();
       }
     };
-
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -249,16 +261,23 @@ const AdminDashboard = () => {
     ],
   };
 
-  const activityChartData = {
+  // Activity Trends Bar Chart Data
+  const activityTrendsBarData = {
     labels: activityTrends.map(item => item.date),
     datasets: [
       {
-        label: 'Daily Activities',
-        data: activityTrends.map(item => item.count),
-        borderColor: '#3B82F6',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        tension: 0.4,
-        fill: true,
+        label: 'Teachers Registered',
+        data: activityTrends.map(item => item.teachers),
+        backgroundColor: '#10B981', // green
+        borderColor: '#059669',
+        borderWidth: 1,
+      },
+      {
+        label: 'Students Registered',
+        data: activityTrends.map(item => item.students),
+        backgroundColor: '#3B82F6', // blue
+        borderColor: '#2563EB',
+        borderWidth: 1,
       },
     ],
   };
@@ -328,6 +347,21 @@ const AdminDashboard = () => {
         return null; // Hide unknown or unimportant actions
     }
   };
+
+  // Fetch teacher assignments on dashboard load
+  useEffect(() => {
+    const fetchTeacherAssignments = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/admin/teacher-assignments`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        setTeacherAssignments(res.data);
+      } catch (error) {
+        // ignore for now
+      }
+    };
+    fetchTeacherAssignments();
+  }, []);
 
   if (isLoading) {
     return (
@@ -471,12 +505,12 @@ const AdminDashboard = () => {
         
         <Card title="Activity Trends (Last 7 Days)">
           <div className="h-64">
-            <Line 
-              data={activityChartData}
+            <Bar 
+              data={activityTrendsBarData}
               options={{
                 plugins: {
                   legend: {
-                    display: false,
+                    position: 'top',
                   },
                 },
                 scales: {
@@ -487,6 +521,10 @@ const AdminDashboard = () => {
                   },
                   y: {
                     beginAtZero: true,
+                    ticks: {
+                      stepSize: 1,
+                      callback: function(value) { return Number(value).toFixed(0); }
+                    }
                   },
                 },
                 maintainAspectRatio: false,
@@ -535,6 +573,50 @@ const AdminDashboard = () => {
           }
           className="lg:col-span-1"
         >
+          <div className="flex flex-wrap gap-2 mb-4">
+            <select
+              value={activityFilter.role}
+              onChange={e => setActivityFilter(f => ({ ...f, role: e.target.value }))}
+              className="border rounded px-2 py-1"
+            >
+              <option value="all">All Roles</option>
+              <option value="admin">Admin</option>
+              <option value="teacher">Teacher</option>
+              <option value="student">Student</option>
+            </select>
+            <select
+              value={activityFilter.classId}
+              onChange={e => setActivityFilter(f => ({ ...f, classId: e.target.value }))}
+              className="border rounded px-2 py-1"
+            >
+              <option value="">All Classes</option>
+              {(
+                activityFilter.role === 'teacher' && activityFilter.userId
+                  ? Array.from(new Set(
+                      teacherAssignments
+                        .filter(a => String(a.teacher_id) === String(activityFilter.userId))
+                        .map(a => ({ id: a.class_id, name: a.class_name }))
+                    )).map(cls => (
+                      <option key={cls.id} value={cls.id}>{cls.name}</option>
+                    ))
+                  : classes.map(cls => (
+                      <option key={cls.id} value={cls.id}>{cls.name}</option>
+                    ))
+              )}
+            </select>
+            <select
+              value={activityFilter.userId}
+              onChange={e => setActivityFilter(f => ({ ...f, userId: e.target.value }))}
+              className="border rounded px-2 py-1"
+            >
+              <option value="">All Users</option>
+              {users
+                .filter(user => activityFilter.role === 'all' || user.role === activityFilter.role)
+                .map(user => (
+                  <option key={user.id} value={user.id}>{user.name}</option>
+                ))}
+            </select>
+          </div>
           <div className="space-y-4 h-96 overflow-y-auto">
             {isActivitiesLoading ? (
               <div className="flex items-center justify-center h-full">

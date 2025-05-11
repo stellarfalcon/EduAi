@@ -39,10 +39,11 @@ class User {
         user_id,
         email,
         role,
+        user_status,
         user_status in (0,2) as is_deleted_user,
-        "created_at" as "createdAt"
-      FROM Users 
-      ORDER BY "created_at" DESC`
+        created_at as "createdAt"
+      FROM users 
+      ORDER BY created_at DESC`
     );
     return result.rows;
   }

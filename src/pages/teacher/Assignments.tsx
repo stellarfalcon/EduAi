@@ -28,6 +28,62 @@ interface CreateAssignmentForm {
   courseId: number;
 }
 
+interface ClassOption {
+  id: number;
+  name: string;
+}
+
+interface CourseOption {
+  id: number;
+  name: string;
+}
+
+const safeToISOString = (dateStr: string | undefined) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? '' : d.toISOString();
+};
+
+const mapAssignment = (data: any): Assignment => {
+  console.log('Raw assignment data before mapping:', JSON.stringify(data, null, 2));
+  
+  // Ensure dueDate is properly formatted
+  let dueDate = data.due_date ?? data.dueDate ?? data.duedate;
+  if (dueDate) {
+    // If it's already in ISO format, use it directly
+    if (typeof dueDate === 'string' && dueDate.includes('T')) {
+      dueDate = dueDate;
+    } else {
+      // Otherwise, try to parse it
+      const date = new Date(dueDate);
+      dueDate = !isNaN(date.getTime()) ? date.toISOString() : undefined;
+    }
+  }
+  
+  const mapped = {
+    id: data.assignment_id ?? data.id,
+    title: data.title,
+    description: data.description,
+    dueDate,
+    classId: data.class_id ?? data.classId ?? 0,
+    className: data.class_name ?? data.className ?? data.classname ?? '',
+    courseId: data.course_id ?? data.courseId ?? 0,
+    courseName: data.course_name ?? data.courseName ?? data.coursename ?? '',
+    totalStudents: data.total_students ?? data.totalStudents ?? data.totalstudents ?? 0,
+    submittedCount: data.submitted_count ?? data.submittedCount ?? data.submittedcount ?? 0,
+    createdAt: data.created_at ?? data.createdAt,
+  };
+  
+  console.log('Mapped assignment:', JSON.stringify(mapped, null, 2));
+  return mapped;
+};
+
+const toISODate = (dateStr: string) => {
+  if (!dateStr) return '';
+  if (dateStr.includes('T')) return dateStr;
+  return dateStr.replace(' ', 'T');
+};
+
 const Assignments = () => {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,74 +100,40 @@ const Assignments = () => {
     courseId: 0,
   });
   
-  const [classes, setClasses] = useState([
-    { id: 1, name: '9th Grade - Section A' },
-    { id: 2, name: '9th Grade - Section B' },
-    { id: 3, name: '10th Grade - Section A' },
-  ]);
-  
-  const [courses, setCourses] = useState([
-    { id: 1, name: 'Biology' },
-    { id: 2, name: 'Chemistry' },
-    { id: 3, name: 'Physics' },
-  ]);
+  const [classes, setClasses] = useState<ClassOption[]>([]);
+  const [courses, setCourses] = useState<CourseOption[]>([]);
+  const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
 
   useEffect(() => {
-    const fetchAssignments = async () => {
+    const fetchData = async () => {
       try {
-        // Mock data for development
-        const mockAssignments = [
-          {
-            id: 1,
-            title: 'Photosynthesis Lab Report',
-            description: 'Write a lab report on the photosynthesis experiment conducted in class.',
-            dueDate: '2025-03-10',
-            classId: 1,
-            className: '9th Grade - Section A',
-            courseId: 1,
-            courseName: 'Biology',
-            totalStudents: 25,
-            submittedCount: 18,
-            createdAt: '2025-02-25',
-          },
-          {
-            id: 2,
-            title: 'Chemical Reactions Worksheet',
-            description: 'Complete the worksheet on balancing chemical equations.',
-            dueDate: '2025-03-15',
-            classId: 1,
-            className: '9th Grade - Section A',
-            courseId: 2,
-            courseName: 'Chemistry',
-            totalStudents: 25,
-            submittedCount: 10,
-            createdAt: '2025-03-01',
-          },
-          {
-            id: 3,
-            title: 'Newton\'s Laws Quiz',
-            description: 'Prepare for a quiz on Newton\'s three laws of motion.',
-            dueDate: '2025-03-08',
-            classId: 3,
-            className: '10th Grade - Section A',
-            courseId: 3,
-            courseName: 'Physics',
-            totalStudents: 22,
-            submittedCount: 22,
-            createdAt: '2025-02-28',
-          },
-        ];
-        
-        setAssignments(mockAssignments);
+        // Fetch assignments
+        const assignmentsRes = await axios.get(`${API_URL}/teacher/assignments`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        setAssignments(assignmentsRes.data.map(mapAssignment));
+
+        // Fetch classes
+        const classesRes = await axios.get(`${API_URL}/teacher/classes`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        setClasses(classesRes.data.map((c: any) => ({ id: c.class_id, name: c.class_name })));
+
+        // Fetch courses
+        const coursesRes = await axios.get(`${API_URL}/teacher/courses`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        setCourses(coursesRes.data.map((c: any) => ({ id: c.course_id, name: c.course_name })));
+
         setIsLoading(false);
       } catch (error) {
-        console.error('Error fetching assignments:', error);
-        toast.error('Failed to load assignments');
+        console.error('Error fetching assignments/classes/courses:', error);
+        toast.error('Failed to load assignments/classes/courses');
         setIsLoading(false);
       }
     };
     
-    fetchAssignments();
+    fetchData();
   }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -128,24 +150,21 @@ const Assignments = () => {
     }
     
     try {
-      // In a real application, this would make an API call to create the assignment
-      
-      // Simulate adding a new assignment
-      const newAssignment: Assignment = {
-        id: Date.now(),
-        title: formData.title,
-        description: formData.description,
-        dueDate: formData.dueDate,
-        classId: Number(formData.classId),
-        className: classes.find(c => c.id === Number(formData.classId))?.name || '',
-        courseId: Number(formData.courseId),
-        courseName: courses.find(c => c.id === Number(formData.courseId))?.name || '',
-        totalStudents: 25,
-        submittedCount: 0,
-        createdAt: new Date().toISOString().split('T')[0],
-      };
-      
-      setAssignments(prev => [newAssignment, ...prev]);
+      const res = await axios.post(
+        `${API_URL}/teacher/assignments`,
+        {
+          title: formData.title,
+          description: formData.description,
+          dueDate: formData.dueDate,
+          classId: formData.classId,
+          courseId: formData.courseId,
+        },
+        { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }
+      );
+      setAssignments(prev => [
+        mapAssignment(res.data),
+        ...prev
+      ]);
       setShowCreateForm(false);
       setFormData({
         title: '',
@@ -189,35 +208,54 @@ const Assignments = () => {
       }
     });
 
-  // Calculate days remaining
-  const getDaysRemaining = (dueDate: string) => {
-    const today = new Date();
-    const due = new Date(dueDate);
-    const diffTime = due.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays < 0) {
-      return 'Past due';
-    } else if (diffDays === 0) {
-      return 'Due today';
-    } else {
-      return `${diffDays} day${diffDays !== 1 ? 's' : ''} left`;
-    }
+  const handleEditClick = (assignment: Assignment) => {
+    setEditingAssignment(assignment);
+    setFormData({
+      title: assignment.title,
+      description: assignment.description,
+      dueDate: assignment.dueDate ? assignment.dueDate.split('T')[0] : '',
+      classId: assignment.classId,
+      courseId: assignment.courseId,
+    });
+    setShowCreateForm(false);
   };
 
-  // Get status color based on days remaining
-  const getStatusColor = (dueDate: string) => {
-    const today = new Date();
-    const due = new Date(dueDate);
-    const diffTime = due.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays < 0) {
-      return 'text-danger-600';
-    } else if (diffDays <= 2) {
-      return 'text-warning-600';
-    } else {
-      return 'text-success-600';
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAssignment) return;
+    if (!formData.title || !formData.description || !formData.dueDate || !formData.classId || !formData.courseId) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    try {
+      const res = await axios.put(
+        `${API_URL}/teacher/assignments/${editingAssignment.id}`,
+        {
+          title: formData.title,
+          description: formData.description,
+          dueDate: formData.dueDate,
+          classId: formData.classId,
+          courseId: formData.courseId,
+        },
+        { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } }
+      );
+      setAssignments(prev => prev.map(a =>
+        a.id === editingAssignment.id
+          ? mapAssignment(res.data)
+          : a
+      ));
+      setEditingAssignment(null);
+      setFormData({
+        title: '',
+        description: '',
+        dueDate: '',
+        classId: 0,
+        courseId: 0,
+      });
+      toast.success('Assignment updated successfully!');
+    } catch (error) {
+      console.error('Error updating assignment:', error);
+      toast.error('Failed to update assignment');
     }
   };
 
@@ -242,9 +280,9 @@ const Assignments = () => {
         </Button>
       </div>
       
-      {showCreateForm && (
-        <Card title="Create New Assignment">
-          <form onSubmit={handleSubmit}>
+      {(showCreateForm || editingAssignment) && (
+        <Card title={editingAssignment ? 'Edit Assignment' : 'Create New Assignment'}>
+          <form onSubmit={editingAssignment ? handleUpdate : handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2">
                 <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
@@ -273,7 +311,7 @@ const Assignments = () => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   required
                 >
-                  <option value="">Select a class</option>
+                  <option value="">Select Class</option>
                   {classes.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -292,7 +330,7 @@ const Assignments = () => {
                   className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   required
                 >
-                  <option value="">Select a course</option>
+                  <option value="">Select Course</option>
                   {courses.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -334,7 +372,17 @@ const Assignments = () => {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setShowCreateForm(false)}
+                onClick={() => {
+                  setShowCreateForm(false);
+                  setEditingAssignment(null);
+                  setFormData({
+                    title: '',
+                    description: '',
+                    dueDate: '',
+                    classId: 0,
+                    courseId: 0,
+                  });
+                }}
               >
                 Cancel
               </Button>
@@ -342,7 +390,7 @@ const Assignments = () => {
                 type="submit"
                 variant="primary"
               >
-                Create Assignment
+                {editingAssignment ? 'Update Assignment' : 'Save Assignment'}
               </Button>
             </div>
           </form>
@@ -404,18 +452,30 @@ const Assignments = () => {
                   <div className="flex items-center">
                     <Clock size={16} className="mr-2" />
                     <div>
-                      <div className="text-xs text-gray-500">Due Date</div>
-                      <div className="text-sm font-medium">{new Date(assignment.dueDate).toLocaleDateString()}</div>
+                      <div className="text-xs text-gray-500">Start Date</div>
+                      <div className="text-sm font-medium">{
+                        assignment.createdAt && !isNaN(new Date(assignment.createdAt).getTime())
+                          ? new Date(assignment.createdAt).toLocaleDateString()
+                          : 'Invalid Date'
+                      }</div>
                     </div>
                   </div>
-                  
                   <div className="flex items-center">
-                    <Clock size={16} className={`mr-2 ${getStatusColor(assignment.dueDate)}`} />
+                    <Clock size={16} className="mr-2" />
                     <div>
-                      <div className="text-xs text-gray-500">Status</div>
-                      <div className={`text-sm font-medium ${getStatusColor(assignment.dueDate)}`}>
-                        {getDaysRemaining(assignment.dueDate)}
-                      </div>
+                      <div className="text-xs text-gray-500">End Date</div>
+                      <div className="text-sm font-medium">{
+                        (() => {
+                          console.log('Assignment createdAt:', assignment.createdAt, typeof assignment.createdAt);
+                          console.log('Assignment dueDate:', assignment.dueDate, typeof assignment.dueDate);
+                          const dateObj = new Date(toISODate(assignment.dueDate));
+                          if (assignment.dueDate && !isNaN(dateObj.getTime())) {
+                            return dateObj.toLocaleDateString();
+                          } else {
+                            return `Invalid Date: ${assignment.dueDate}`;
+                          }
+                        })()
+                      }</div>
                     </div>
                   </div>
                 </div>
@@ -437,7 +497,6 @@ const Assignments = () => {
                     )}
                   </div>
                 </div>
-                
                 <div className="flex space-x-2">
                   <Button
                     variant="outline"
@@ -448,6 +507,7 @@ const Assignments = () => {
                   <Button
                     variant="primary"
                     size="sm"
+                    onClick={() => handleEditClick(assignment)}
                   >
                     Edit
                   </Button>

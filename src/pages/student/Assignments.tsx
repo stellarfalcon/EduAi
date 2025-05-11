@@ -32,78 +32,12 @@ const StudentAssignments = () => {
   useEffect(() => {
     const fetchAssignments = async () => {
       try {
-        // Mock data for development
-        const mockAssignments = [
-          {
-            id: 1,
-            title: 'Biology Report: Cellular Respiration',
-            description: 'Write a detailed report on the cellular respiration process, including the stages and energy production.',
-            courseName: 'Biology',
-            teacherName: 'Dr. Smith',
-            dueDate: '2025-03-10',
-            status: 'In Progress' as const,
-          },
-          {
-            id: 2,
-            title: 'Math Problem Set: Quadratic Equations',
-            description: 'Complete problems 1-20 in Chapter 5 on quadratic equations and their applications.',
-            courseName: 'Mathematics',
-            teacherName: 'Mr. Johnson',
-            dueDate: '2025-03-12',
-            status: 'Not Started' as const,
-          },
-          {
-            id: 3,
-            title: 'Historical Analysis Essay',
-            description: 'Write a 1000-word essay analyzing the causes and effects of the Industrial Revolution.',
-            courseName: 'History',
-            teacherName: 'Ms. Brown',
-            dueDate: '2025-03-15',
-            status: 'Not Started' as const,
-          },
-          {
-            id: 4,
-            title: 'Physics Lab: Force and Motion',
-            description: 'Complete the lab experiment on Newton\'s laws of motion and submit your findings.',
-            courseName: 'Physics',
-            teacherName: 'Dr. Wilson',
-            dueDate: '2025-03-18',
-            status: 'Not Started' as const,
-          },
-          {
-            id: 5,
-            title: 'Literary Analysis: Shakespeare',
-            description: 'Analyze the themes and character development in one of Shakespeare\'s sonnets.',
-            courseName: 'English Literature',
-            teacherName: 'Mrs. Davis',
-            dueDate: '2025-03-01',
-            status: 'Completed' as const,
-            grade: 'A',
-            feedback: 'Excellent analysis of the themes and strong supporting evidence from the text.',
-          },
-          {
-            id: 6,
-            title: 'Chemistry Lab: Titration',
-            description: 'Complete the titration lab and record your observations and calculations.',
-            courseName: 'Chemistry',
-            teacherName: 'Dr. Martinez',
-            dueDate: '2025-02-28',
-            status: 'Completed' as const,
-            grade: 'B+',
-            feedback: 'Good work on the lab procedure, but some calculations contained minor errors.',
-          },
-          {
-            id: 7,
-            title: 'Algebra Quiz Review',
-            description: 'Complete the review worksheet to prepare for the upcoming quiz on linear algebra.',
-            courseName: 'Mathematics',
-            teacherName: 'Mr. Johnson',
-            dueDate: '2025-02-25',
-            status: 'Overdue' as const,
-          },
-        ];
-        
-        setAssignments(mockAssignments);
+        const response = await axios.get(`${API_URL}/student/assignments`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        setAssignments(response.data);
         setIsLoading(false);
       } catch (error) {
         console.error('Error fetching assignments:', error);
@@ -131,7 +65,15 @@ const StudentAssignments = () => {
 
   const handleUpdateStatus = async (id: number, newStatus: Assignment['status']) => {
     try {
-      // In a real application, this would make an API call
+      await axios.put(
+        `${API_URL}/student/assignments/${id}/status`,
+        { status: newStatus },
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      );
       
       // Update local state
       setAssignments(assignments.map(assignment => 

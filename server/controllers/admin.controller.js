@@ -120,7 +120,22 @@ export const rejectRegistration = async (req, res) => {
 
 export const getUsers = async (req, res) => {
   try {
-    const users = await User.findAll();
+    const { role } = req.query;
+    let users;
+    if (role === 'student') {
+      // Only active students
+      const result = await pool.query(
+        `SELECT u.user_id, u.email, u.role, u.user_status, up.full_name, up.class_id, c.class_name
+         FROM users u
+         JOIN user_profiles up ON u.user_id = up.user_id
+         LEFT JOIN classes c ON up.class_id = c.class_id
+         WHERE u.role = 'student' AND u.user_status = 1
+         ORDER BY up.full_name ASC`
+      );
+      users = result.rows;
+    } else {
+      users = await User.findAll();
+    }
     return res.json(users);
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -235,7 +250,8 @@ export const getDashboardStats = async (req, res) => {
 
 export const getRecentActivities = async (req, res) => {
   try {
-    const activities = await Activity.getRecentActivities();
+    const { role, classId, userId } = req.query;
+    const activities = await Activity.getRecentActivities({ role, classId, userId });
     return res.json(activities);
   } catch (error) {
     console.error('Error fetching recent activities:', error);
@@ -264,7 +280,7 @@ export const getToolUsageStats = async (req, res) => {
 
 export const getActivityTrends = async (req, res) => {
   try {
-    const activityTrends = await Activity.getDailyActivityCounts(7);
+    const activityTrends = await Activity.getDailyRegistrationCounts(7);
     return res.json(activityTrends);
   } catch (error) {
     console.error('Error fetching activity trends:', error);
@@ -511,5 +527,73 @@ export const updateTeacherAssignment = async (req, res) => {
   } catch (error) {
     console.error('Error updating assignment:', error);
     res.status(500).json({ message: 'Failed to update assignment' });
+  }
+};
+
+export const allocateStudentToClass = async (req, res) => {
+  const { studentId, classId } = req.body;
+  if (!studentId || !classId) {
+    return res.status(400).json({ message: 'Student ID and Class ID are required' });
+  }
+  try {
+    // Get student and class details for logging
+    const studentResult = await pool.query(
+      'SELECT full_name FROM user_profiles WHERE user_id = $1',
+      [studentId]
+    );
+    const classResult = await pool.query(
+      'SELECT class_name FROM classes WHERE class_id = $1',
+      [classId]
+    );
+    const studentName = studentResult.rows[0]?.full_name;
+    const className = classResult.rows[0]?.class_name;
+    // Update student's class
+    await pool.query(
+      'UPDATE user_profiles SET class_id = $1 WHERE user_id = $2',
+      [classId, studentId]
+    );
+    // Log the activity
+    await logActivity(
+      req.user.userId,
+      req.user.role,
+      'allocate_student',
+      `Allocated ${studentName} to class ${className}`
+    );
+    res.json({ message: 'Student allocated to class successfully' });
+  } catch (error) {
+    console.error('Error allocating student to class:', error);
+    res.status(500).json({ message: 'Failed to allocate student to class' });
+  }
+};
+
+export const removeStudentAllocation = async (req, res) => {
+  const { studentId } = req.params;
+  try {
+    // Get student details for logging
+    const studentResult = await pool.query(
+      `SELECT up.full_name, c.class_name 
+       FROM user_profiles up
+       LEFT JOIN classes c ON up.class_id = c.class_id
+       WHERE up.user_id = $1`,
+      [studentId]
+    );
+    const studentName = studentResult.rows[0]?.full_name;
+    const className = studentResult.rows[0]?.class_name;
+    // Remove student from class
+    await pool.query(
+      'UPDATE user_profiles SET class_id = NULL WHERE user_id = $1',
+      [studentId]
+    );
+    // Log the activity
+    await logActivity(
+      req.user.userId,
+      req.user.role,
+      'remove_student_allocation',
+      `Removed allocation of ${studentName} from class ${className}`
+    );
+    res.json({ message: 'Student allocation removed from class successfully' });
+  } catch (error) {
+    console.error('Error removing student allocation from class:', error);
+    res.status(500).json({ message: 'Failed to remove student allocation from class' });
   }
 };

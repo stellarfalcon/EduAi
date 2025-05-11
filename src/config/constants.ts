@@ -34,9 +34,11 @@ export const ROUTES = {
     { name: 'Registration Requests', path: '/admin/registration-requests', icon: 'UserPlus' },
     { name: 'Users', path: '/admin/users', icon: 'Users' },
     { name: 'Teacher Class Allocation', path: '/admin/teacher-assignments', icon: 'Presentation' },
+    { name: 'Student Class Allocation', path: '/admin/student-class-allocation', icon: 'Users' },
   ],
   TEACHER: [
     { name: 'Dashboard', path: '/teacher/dashboard', icon: 'LayoutDashboard' },
+    { name: 'Student Class Assignment', path: '/teacher/student-class-assignment', icon: 'Users' },
     { name: 'Lesson Planner', path: '/teacher/lesson-planner', icon: 'Book' },
     { name: 'Assignments', path: '/teacher/assignments', icon: 'FileText' },
   ],

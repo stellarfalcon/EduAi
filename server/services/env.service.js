@@ -47,8 +47,8 @@ class EnvironmentService {
         port: parseInt(process.env.DB_PORT) || 5432,
         database: process.env.DB_NAME || 'postgres',
         user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || '68NITec@2011',
-        schema: process.env.DB_SCHEMA || 'edu_platform'
+        password: process.env.DB_PASSWORD || 'groot',
+        schema: process.env.DB_SCHEMA || 'public'
       },
       nodeEnv: process.env.NODE_ENV || 'development'
     };

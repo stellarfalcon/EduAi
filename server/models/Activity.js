@@ -30,22 +30,25 @@ class Activity {
     return result.rows;
   }
 
-  static async getRecentActivities(limit = 5) {
-    const result = await pool.query(
-      `SELECT 
-        a.id,
-        a.activity_name,
-        a.role,
-        a.activity_timestamp,
-        COALESCE(up.full_name, u.email) as user_name
-      FROM activities a
-      LEFT JOIN Users u ON a.user_id = u.user_id
-      LEFT JOIN user_profiles up ON u.user_id = up.user_id
-      ORDER BY a.activity_timestamp DESC
-      LIMIT $1`,
-      [limit]
-    );
-    return result.rows;
+  static async getRecentActivities() {
+    try {
+      const result = await pool.query(
+        `SELECT 
+          a.activity_name,
+          a.role,
+          a.activity_timestamp,
+          COALESCE(up.full_name, u.email) as user_name
+        FROM activities a
+        LEFT JOIN users u ON a.user_id = u.user_id
+        LEFT JOIN user_profiles up ON u.user_id = up.user_id
+        WHERE DATE(a.activity_timestamp) = CURRENT_DATE
+        ORDER BY a.activity_timestamp DESC`
+      );
+      return result.rows;
+    } catch (error) {
+      console.error('Error in getRecentActivities:', error);
+      throw new Error('Failed to fetch recent activities: ' + error.message);
+    }
   }
 
   static async getToolUsageStats() {
@@ -57,7 +60,7 @@ class Activity {
       WHERE activity_name LIKE 'use_%'
       GROUP BY activity_name
       ORDER BY usage_count DESC
-      LIMIT 5`
+      LIMIT 20`
     );
     return result.rows;
   }

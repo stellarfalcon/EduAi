@@ -2,7 +2,7 @@ import { useContext, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, UserPlus, Book, FileText, 
-  Bot, LogOut, Menu, X, ChevronDown, ChevronRight 
+  Bot, LogOut, Menu, X, ChevronDown, ChevronRight, Presentation 
 } from 'lucide-react';
 import AuthContext from '../../context/AuthContext';
 import { ROUTES } from '../../config/constants';
@@ -14,6 +14,7 @@ const iconMap: Record<string, React.ReactNode> = {
   Book: <Book size={20} />,
   FileText: <FileText size={20} />,
   Bot: <Bot size={20} />,
+  Presentation: <Presentation size={20} />,
 };
 
 interface SidebarProps {

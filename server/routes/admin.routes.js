@@ -10,7 +10,14 @@ import {
   getDashboardStats,
   getRecentActivities,
   getToolUsageStats,
-  getActivityTrends
+  getActivityTrends,
+  getFilteredAttendance,
+  assignTeacherToClassCourse,
+  getAllClasses,
+  getAllCourses,
+  getAllTeacherAssignments,
+  deleteTeacherAssignment,
+  updateTeacherAssignment
 } from '../controllers/admin.controller.js';
 import { apiLimiter } from '../middleware/rateLimit.js';
 
@@ -24,6 +31,7 @@ router.get('/dashboard/stats', authenticateUser, authorizeRoles(['admin']), getD
 router.get('/dashboard/activities', authenticateUser, authorizeRoles(['admin']), getRecentActivities);
 router.get('/dashboard/tool-usage', authenticateUser, authorizeRoles(['admin']), getToolUsageStats);
 router.get('/dashboard/activity-trends', authenticateUser, authorizeRoles(['admin']), getActivityTrends);
+router.get('/dashboard/attendance', authenticateUser, authorizeRoles(['admin']), getFilteredAttendance);
 
 // Registration requests routes
 router.get('/registration-requests', authenticateUser, authorizeRoles(['admin']), getRegistrationRequests);
@@ -54,5 +62,13 @@ router.put(
   authorizeRoles(['admin']),
   reactivateUser
 );
+
+// Teacher/class/course assignment
+router.post('/assign-teacher', authenticateUser, authorizeRoles(['admin']), assignTeacherToClassCourse);
+router.get('/classes', authenticateUser, authorizeRoles(['admin']), getAllClasses);
+router.get('/courses', authenticateUser, authorizeRoles(['admin']), getAllCourses);
+router.get('/teacher-assignments', authenticateUser, authorizeRoles(['admin']), getAllTeacherAssignments);
+router.delete('/teacher-assignments/:id', authenticateUser, authorizeRoles(['admin']), deleteTeacherAssignment);
+router.put('/teacher-assignments/:id', authenticateUser, authorizeRoles(['admin']), updateTeacherAssignment);
 
 export default router;

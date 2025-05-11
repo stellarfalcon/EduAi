@@ -8,10 +8,10 @@ class RegistrationRequest {
     return result.rows;
   }
 
-  static async create(username, hashedPassword, role) {
+  static async create(username, hashedPassword, role, fullName, contactNumber) {
     const result = await pool.query(
-      'INSERT INTO registration_requests (username, password, role) VALUES ($1, $2, $3) RETURNING *',
-      [username, hashedPassword, role]
+      'INSERT INTO registration_requests (username, password, role, full_name, contact_number) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [username, hashedPassword, role, fullName, contactNumber]
     );
     return result.rows[0];
   }

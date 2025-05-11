@@ -5,7 +5,7 @@ import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, PointElement,
 import { Doughnut, Line, Bar } from 'react-chartjs-2';
 import axios from 'axios';
 import { API_URL } from '../../config/constants';
-import { Users, GraduationCap, CalendarClock, Activity, MapPin, Calendar, Clock } from 'lucide-react';
+import { Users, GraduationCap, CalendarClock, Activity, MapPin, Calendar, Clock, Filter } from 'lucide-react';
 import { toast } from 'react-toastify';
 import CreateEventModal from '../../components/ui/CreateEventModal';
 
@@ -18,6 +18,24 @@ interface StatsData {
   totalAdmins: number;
   pendingRequests: number;
   averageAttendance: number;
+}
+
+interface AttendanceFilter {
+  role: 'all' | 'student' | 'teacher';
+  userId: string;
+  classId: string;
+  timeRange: 'week' | 'month' | 'semester' | 'year';
+}
+
+interface Class {
+  id: string;
+  name: string;
+}
+
+interface User {
+  id: string;
+  name: string;
+  role: string;
 }
 
 interface ActivityData {
@@ -57,12 +75,43 @@ const AdminDashboard = () => {
     averageAttendance: 0,
   });
   
+  const [attendanceFilter, setAttendanceFilter] = useState<AttendanceFilter>({
+    role: 'all',
+    userId: '',
+    classId: '',
+    timeRange: 'month'
+  });
+
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
   const [toolUsage, setToolUsage] = useState<ToolUsage[]>([]);
   const [activityTrends, setActivityTrends] = useState<ActivityData[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date>(new Date());
+  const [isActivitiesLoading, setIsActivitiesLoading] = useState(true);
+
+  const fetchRecentActivities = useCallback(async () => {
+    try {
+      setIsActivitiesLoading(true);
+      const activitiesResponse = await axios.get(`${API_URL}/admin/dashboard/activities`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      setRecentActivities(activitiesResponse.data);
+      setLastRefreshTime(new Date());
+    } catch (error) {
+      console.error('Error fetching recent activities:', error);
+      toast.error('Failed to load recent activities');
+    } finally {
+      setIsActivitiesLoading(false);
+    }
+  }, []);
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -76,13 +125,29 @@ const AdminDashboard = () => {
       });
       setStatsData(statsResponse.data);
 
-      // Fetch recent activities
-      const activitiesResponse = await axios.get(`${API_URL}/admin/dashboard/activities`, {
+      // Fetch classes
+      const classesResponse = await axios.get(`${API_URL}/admin/classes`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      setRecentActivities(activitiesResponse.data);
+      setClasses(classesResponse.data);
+
+      // Fetch users
+      const usersResponse = await axios.get(`${API_URL}/admin/users`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      setUsers(usersResponse.data);
+
+      console.log('Teachers array:', users);
+
+      // Fetch filtered attendance
+      await fetchFilteredAttendance();
+
+      // Fetch recent activities
+      await fetchRecentActivities();
 
       // Fetch tool usage stats
       const toolUsageResponse = await axios.get(`${API_URL}/admin/dashboard/tool-usage`, {
@@ -114,11 +179,62 @@ const AdminDashboard = () => {
       toast.error('Failed to load dashboard data');
       setIsLoading(false);
     }
-  }, []);
+  }, [fetchRecentActivities]);
+
+  const fetchFilteredAttendance = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/admin/dashboard/attendance`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        params: attendanceFilter
+      });
+      
+      setStatsData(prev => ({
+        ...prev,
+        averageAttendance: response.data.averageAttendance
+      }));
+    } catch (error) {
+      console.error('Error fetching filtered attendance:', error);
+      toast.error('Failed to load attendance data');
+    }
+  };
 
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
+
+  useEffect(() => {
+    fetchFilteredAttendance();
+  }, [attendanceFilter]);
+
+  // Initial load of activities
+  useEffect(() => {
+    fetchRecentActivities();
+  }, [fetchRecentActivities]);
+
+  // Polling effect for recent activities
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      fetchRecentActivities();
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [fetchRecentActivities]);
+
+  // Visibility change handler
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchRecentActivities();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchRecentActivities]);
 
   // Chart data
   const userDistributionData = {
@@ -180,7 +296,11 @@ const AdminDashboard = () => {
   // };
 
   const getActivityDescription = (activityName: string) => {
-    switch (activityName) {
+    // Filter out HTTP logs entirely
+    if (/^(GET|POST|PUT|DELETE) \//.test(activityName)) {
+      return null; // Do not render this activity
+    }
+    switch (activityName.toLowerCase()) {
       case 'login':
         return 'Logged into the system';
       case 'submit_assignment':
@@ -197,8 +317,15 @@ const AdminDashboard = () => {
         return 'Deactivated a user';
       case 'reactivate_user':
         return 'Reactivated a user';
+      case 'assign_teacher':
+        return 'Assigned a teacher to a class/course';
+      case 'remove_teacher_assignment':
+        return 'Removed a teacher-class allocation';
+      case 'update_teacher_assignment':
+        return 'Updated a teacher-class allocation';
+      // Add more as needed for your admin actions
       default:
-        return activityName;
+        return null; // Hide unknown or unimportant actions
     }
   };
 
@@ -221,7 +348,7 @@ const AdminDashboard = () => {
               <Users size={24} />
             </div>
             <div>
-              <p className="text-sm font-medium text-white/80">Total Students</p>
+              <p className="text-sm font-medium text-white/80">Active Students</p>
               <h3 className="text-2xl font-bold">{statsData.totalStudents}</h3>
             </div>
           </div>
@@ -233,7 +360,7 @@ const AdminDashboard = () => {
               <GraduationCap size={24} />
             </div>
             <div>
-              <p className="text-sm font-medium text-white/80">Total Teachers</p>
+              <p className="text-sm font-medium text-white/80">Active Teachers</p>
               <h3 className="text-2xl font-bold">{statsData.totalTeachers}</h3>
             </div>
           </div>
@@ -256,9 +383,70 @@ const AdminDashboard = () => {
             <div className="p-3 rounded-full bg-white/20 mr-4">
               <CalendarClock size={24} />
             </div>
-            <div>
-              <p className="text-sm font-medium text-white/80">Avg. Attendance</p>
-              <h3 className="text-2xl font-bold">{statsData.averageAttendance}%</h3>
+            <div className="flex-1">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-sm font-medium text-white/80">Avg. Attendance</p>
+                  <h3 className="text-2xl font-bold">{statsData.averageAttendance}%</h3>
+                </div>
+                <button
+                  onClick={() => setIsFilterOpen(!isFilterOpen)}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                >
+                  <Filter size={20} />
+                </button>
+              </div>
+              
+              {isFilterOpen && (
+                <div className="mt-4 p-4 bg-white/10 rounded-lg space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <select
+                      value={attendanceFilter.role}
+                      onChange={(e) => setAttendanceFilter(prev => ({ ...prev, role: e.target.value as AttendanceFilter['role'] }))}
+                      className="bg-white/20 text-white rounded-md px-3 py-2 text-sm"
+                    >
+                      <option value="all">All Roles</option>
+                      <option value="student">Students</option>
+                      <option value="teacher">Teachers</option>
+                    </select>
+                    
+                    <select
+                      value={attendanceFilter.timeRange}
+                      onChange={(e) => setAttendanceFilter(prev => ({ ...prev, timeRange: e.target.value as AttendanceFilter['timeRange'] }))}
+                      className="bg-white/20 text-white rounded-md px-3 py-2 text-sm"
+                    >
+                      <option value="week">This Week</option>
+                      <option value="month">This Month</option>
+                      <option value="semester">This Semester</option>
+                      <option value="year">This Year</option>
+                    </select>
+                  </div>
+                  
+                  <select
+                    value={attendanceFilter.classId}
+                    onChange={(e) => setAttendanceFilter(prev => ({ ...prev, classId: e.target.value }))}
+                    className="w-full bg-white/20 text-white rounded-md px-3 py-2 text-sm"
+                  >
+                    <option value="">All Classes</option>
+                    {classes.map((cls) => (
+                      <option key={cls.id} value={cls.id}>{cls.name}</option>
+                    ))}
+                  </select>
+                  
+                  <select
+                    value={attendanceFilter.userId}
+                    onChange={(e) => setAttendanceFilter(prev => ({ ...prev, userId: e.target.value }))}
+                    className="w-full bg-white/20 text-white rounded-md px-3 py-2 text-sm"
+                  >
+                    <option value="">All Users</option>
+                    {users
+                      .filter(user => attendanceFilter.role === 'all' || user.role === attendanceFilter.role)
+                      .map((user) => (
+                        <option key={user.id} value={user.id}>{user.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           </div>
         </Card>
@@ -311,35 +499,78 @@ const AdminDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card 
           title={
-            <div className="flex items-center">
-              <Activity size={18} className="text-primary-500 mr-2" />
-              <span>Recent Activities</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Activity size={18} className="text-primary-500 mr-2" />
+                <span>Today's Activities</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-gray-500">
+                  Last updated: {lastRefreshTime.toLocaleTimeString()}
+                </span>
+                <button
+                  onClick={() => {
+                    setIsRefreshing(true);
+                    fetchRecentActivities().finally(() => setIsRefreshing(false));
+                  }}
+                  className="p-1 hover:bg-gray-100 rounded-full transition-colors"
+                  disabled={isRefreshing}
+                >
+                  <svg
+                    className={`w-4 h-4 text-gray-500 ${isRefreshing ? 'animate-spin' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                </button>
+              </div>
             </div>
           }
           className="lg:col-span-1"
         >
           <div className="space-y-4 h-96 overflow-y-auto">
-            {recentActivities.map((activity) => (
-              <div key={activity.id} className="flex items-start border-b border-gray-100 pb-3">
-                <div className={`w-2 h-2 rounded-full mt-2 mr-3 ${
-                  activity.role === 'teacher' ? 'bg-secondary-500' : 
-                  activity.role === 'student' ? 'bg-primary-500' : 'bg-warning-500'
-                }`}></div>
-                <div className="flex-1">
-                  <div className="flex justify-between">
-                    <p className="text-sm font-medium text-gray-800">{activity.user_name}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      activity.role === 'teacher' ? 'bg-secondary-100 text-secondary-800' : 
-                      activity.role === 'student' ? 'bg-primary-100 text-primary-800' : 'bg-warning-100 text-warning-800'
-                    }`}>
-                      {activity.role}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">{formatDate(activity.activity_timestamp)}</p>
-                  <p className="text-sm mt-1">{getActivityDescription(activity.activity_name)}</p>
-                </div>
+            {isActivitiesLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-pulse">Loading activities...</div>
               </div>
-            ))}
+            ) : recentActivities.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                No activities for today
+              </div>
+            ) : (
+              recentActivities.map((activity) => {
+                const desc = getActivityDescription(activity.activity_name);
+                if (!desc) return null; // Skip HTTP logs and unknowns
+                return (
+                  <div key={activity.id} className="flex items-start border-b border-gray-100 pb-3">
+                    <div className={`w-2 h-2 rounded-full mt-2 mr-3 ${
+                      activity.role === 'teacher' ? 'bg-secondary-500' : 
+                      activity.role === 'student' ? 'bg-primary-500' : 'bg-warning-500'
+                    }`}></div>
+                    <div className="flex-1">
+                      <div className="flex justify-between">
+                        <p className="text-sm font-medium text-gray-800">{activity.user_name}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          activity.role === 'teacher' ? 'bg-secondary-100 text-secondary-800' : 
+                          activity.role === 'student' ? 'bg-primary-100 text-primary-800' : 'bg-warning-100 text-warning-800'
+                        }`}>
+                          {activity.role}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{formatDate(activity.activity_timestamp)}</p>
+                      <p className="text-sm mt-1">{desc}</p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </Card>
         
@@ -398,20 +629,7 @@ const AdminDashboard = () => {
                         <Calendar className="h-4 w-4 mr-1" />
                         {formatEventDate(event.event_date)}
                       </span>
-                      {/* <span className="flex items-center">
-                        <Clock className="h-4 w-4 mr-1" />
-                        {formatEventTime(event.event_time)}
-                      </span>
-                      {event.location && (
-                        <span className="flex items-center">
-                          <MapPin className="h-4 w-4 mr-1" />
-                          {event.location}
-                        </span>
-                      )} */}
                     </div>
-                    {/* <div className="mt-1 text-xs text-gray-500">
-                      Organized by: {event.organizer_name}
-                    </div> */}
                   </div>
                 </div>
               ))

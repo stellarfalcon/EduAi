@@ -4,7 +4,7 @@ import { Chart as ChartJS, ArcElement, CategoryScale, LinearScale, PointElement,
 import { Doughnut, Line } from 'react-chartjs-2';
 import axios from 'axios';
 import { API_URL } from '../../config/constants';
-import { BookOpen, CheckSquare, Calendar, Award, Clock } from 'lucide-react';
+import { BookOpen, CheckSquare, Calendar, Award, Clock, CheckCircle } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import { toast } from 'react-toastify';
 
@@ -54,6 +54,21 @@ const StudentDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [attendanceHistory, setAttendanceHistory] = useState<Record<string, number>>({});
   const [upcomingEvents, setUpcomingEvents] = useState<Event[]>([]);
+  const [attendanceMarked, setAttendanceMarked] = useState(false);
+  const [attendanceMarking, setAttendanceMarking] = useState(false);
+  const [studentClass, setStudentClass] = useState<any>(null);
+
+  // Use /student/attendance/self endpoint to check if attendance is marked for today
+  const checkAttendance = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/student/attendance/self`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      setAttendanceMarked(response.data.marked);
+    } catch (error) {
+      setAttendanceMarked(false);
+    }
+  };
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -98,6 +113,15 @@ const StudentDashboard = () => {
         });
         setUpcomingEvents(eventsResponse.data);
         
+        // Check if attendance is already marked for today
+        await checkAttendance();
+        
+        // Fetch student's class
+        const classRes = await axios.get(`${API_URL}/student/classes`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        setStudentClass(classRes.data && classRes.data.length > 0 ? classRes.data[0] : null);
+        
         setIsLoading(false);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
@@ -108,6 +132,21 @@ const StudentDashboard = () => {
 
     fetchDashboardData();
   }, []);
+
+  const handleMarkAttendance = async () => {
+    setAttendanceMarking(true);
+    try {
+      await axios.post(`${API_URL}/student/attendance/mark`, {}, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      toast.success('Attendance marked for today!');
+      await checkAttendance();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to mark attendance');
+    } finally {
+      setAttendanceMarking(false);
+    }
+  };
 
   // Chart data
   const attendanceData = {
@@ -197,9 +236,50 @@ const StudentDashboard = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {studentClass && (
+        <Card className="bg-gradient-to-r from-secondary-100 to-secondary-200 border border-secondary-300">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="text-lg font-bold text-secondary-800">Current Class: {studentClass.class_name}</div>
+              <div className="text-sm text-secondary-700 mt-1">
+                Teachers:
+                {studentClass.teachers && studentClass.teachers.length > 0 ? (
+                  <ul className="ml-2 list-disc">
+                    {studentClass.teachers.map((teacher: any) => (
+                      <li key={teacher.user_id} className="text-secondary-700">
+                        {teacher.full_name} <span className="text-xs text-secondary-500">({teacher.email})</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="ml-2 text-secondary-500">No teachers assigned</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
       <h1 className="text-2xl font-bold text-gray-800">Student Dashboard</h1>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Card className="bg-gradient-to-r from-primary-500 to-primary-600 text-white">
+          <div className="flex items-center">
+            <div className="p-3 rounded-full bg-white/20 mr-4">
+              <CheckCircle size={24} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-white/80 truncate">Your Attendance</p>
+              <h3 className="text-xl md:text-2xl font-bold break-words">{attendanceMarked ? 'Present' : 'Not Marked'}</h3>
+              <button
+                className={`mt-4 px-4 py-2 rounded-md font-semibold text-sm w-full ${attendanceMarked ? 'bg-success-500 text-white cursor-not-allowed' : 'bg-white text-primary-700 hover:bg-primary-100'} transition`}
+                onClick={handleMarkAttendance}
+                disabled={attendanceMarked || attendanceMarking}
+              >
+                {attendanceMarked ? 'Marked' : attendanceMarking ? 'Marking...' : 'Mark Now'}
+              </button>
+            </div>
+          </div>
+        </Card>
         <Card className="bg-gradient-to-r from-primary-500 to-primary-600 text-white">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-white/20 mr-4">
@@ -211,7 +291,6 @@ const StudentDashboard = () => {
             </div>
           </div>
         </Card>
-        
         <Card className="bg-gradient-to-r from-secondary-500 to-secondary-600 text-white">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-white/20 mr-4">
@@ -223,7 +302,6 @@ const StudentDashboard = () => {
             </div>
           </div>
         </Card>
-        
         <Card className="bg-gradient-to-r from-success-500 to-success-600 text-white">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-white/20 mr-4">
@@ -235,7 +313,6 @@ const StudentDashboard = () => {
             </div>
           </div>
         </Card>
-        
         <Card className="bg-gradient-to-r from-warning-500 to-warning-600 text-white">
           <div className="flex items-center">
             <div className="p-3 rounded-full bg-white/20 mr-4">
@@ -249,29 +326,7 @@ const StudentDashboard = () => {
         </Card>
       </div>
       
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card title="Courses Progress" className="lg:col-span-2">
-          <div className="space-y-4 h-96 overflow-y-auto">
-            {courses.map((course) => (
-              <div key={course.id} className="border-b border-gray-100 pb-4 last:border-b-0 last:pb-0">
-                <div className="flex justify-between mb-1">
-                  <div>
-                    <h4 className="font-medium text-gray-900">{course.name}</h4>
-                    <p className="text-sm text-gray-500">Teacher: {course.teacherName}</p>
-                  </div>
-                  <span className="font-medium">{course.progress}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2.5">
-                  <div 
-                    className={`h-2.5 rounded-full ${getProgressColor(course.progress)}`}
-                    style={{ width: `${course.progress}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-        
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card title="Attendance Overview" className="lg:col-span-1">
           <div className="flex justify-center items-center h-40 mb-4">
             <div className="w-36 h-36 relative">
@@ -333,64 +388,6 @@ const StudentDashboard = () => {
             />
           </div>
         </Card>
-      </div>
-      
-      <Card title="Upcoming Assignments">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assignment</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Course</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {upcomingAssignments.map((assignment) => (
-                <tr key={assignment.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{assignment.title}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="px-2 py-1 text-xs rounded-full bg-primary-100 text-primary-800">
-                      {assignment.courseName}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <Clock size={16} className={`mr-2 ${getStatusColor(assignment.dueDate)}`} />
-                      <div>
-                        <div className="text-sm text-gray-500">{new Date(assignment.dueDate).toLocaleDateString()}</div>
-                        <div className={`text-xs font-medium ${getStatusColor(assignment.dueDate)}`}>
-                          {getDaysRemaining(assignment.dueDate)}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      assignment.status === 'Completed' ? 'bg-success-100 text-success-800' :
-                      assignment.status === 'In Progress' ? 'bg-warning-100 text-warning-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {assignment.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <Button variant="outline" size="sm">
-                      View
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card title="Upcoming Events" className="lg:col-span-1">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-medium text-gray-900">Upcoming Events</h3>
@@ -423,8 +420,6 @@ const StudentDashboard = () => {
           </div>
         </Card>
       </div>
-
-      
     </div>
   );
 };

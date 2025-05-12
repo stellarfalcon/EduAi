@@ -30,11 +30,21 @@ class Assignment {
 
   static async findByStudent(studentId) {
     const result = await pool.query(
-      'SELECT a.*, u.email as teacher_name, c.name as course_name FROM assignments a ' +
-      'JOIN Users u ON a.teacher_id = u.user_id ' +
-      'JOIN Courses c ON a.course_id = c.course_id ' +
-      'WHERE a.class_id IN (SELECT class_id FROM student_classes WHERE student_id = $1) ' +
-      'ORDER BY a.due_date ASC',
+      `SELECT 
+        a.assignment_id AS id,
+        a.title,
+        a.description,
+        TO_CHAR(a.due_date, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "dueDate",
+        c.course_name AS "courseName",
+        up.full_name AS "teacherName",
+        sas.status
+      FROM student_assignment_status sas
+      JOIN assignments a ON sas.assignment_id = a.assignment_id
+      JOIN class_courses cc ON a.class_course_id = cc.id
+      JOIN courses c ON cc.course_id = c.course_id
+      JOIN user_profiles up ON cc.teacher_id = up.user_id
+      WHERE sas.student_id = $1
+      ORDER BY a.due_date ASC`,
       [studentId]
     );
     return result.rows;
@@ -56,12 +66,31 @@ class Assignment {
       'VALUES ($1, $2, $3, $4, $5) RETURNING *',
       [title, description, dueDate, classCourseId, teacherId]
     );
+    const assignmentId = result.rows[0].assignment_id;
+    console.log('Assignment created:', result.rows[0]);
+    // Insert into student_assignment_status for all students in the class
+    const studentsInClass = await pool.query(
+      'SELECT user_id FROM user_profiles WHERE class_id = $1',
+      [classId]
+    );
+    console.log('Found', studentsInClass.rows.length, 'students in class', classId);
+    for (const row of studentsInClass.rows) {
+      try {
+        console.log('Inserting student_assignment_status for student', row.user_id);
+        await pool.query(
+          'INSERT INTO student_assignment_status (assignment_id, student_id, status) VALUES ($1, $2, $3)',
+          [assignmentId, row.user_id, 'Not Attempted']
+        );
+      } catch (err) {
+        console.error('Error inserting student_assignment_status for student', row.user_id, err);
+      }
+    }
     return result.rows[0];
   }
 
   static async updateStatus(assignmentId, studentId, status) {
     const result = await pool.query(
-      'INSERT INTO assignment_status (assignment_id, student_id, status) ' +
+      'INSERT INTO student_assignment_status (assignment_id, student_id, status) ' +
       'VALUES ($1, $2, $3) ' +
       'ON CONFLICT (assignment_id, student_id) ' +
       'DO UPDATE SET status = $3, updated_at = CURRENT_TIMESTAMP ' +
@@ -73,7 +102,7 @@ class Assignment {
 
   static async findById(id) {
     const result = await pool.query(
-      'SELECT * FROM assignments WHERE id = $1',
+      'SELECT * FROM assignments WHERE assignment_id = $1',
       [id]
     );
     return result.rows[0];

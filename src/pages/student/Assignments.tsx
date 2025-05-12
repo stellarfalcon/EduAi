@@ -13,7 +13,7 @@ interface Assignment {
   courseName: string;
   teacherName: string;
   dueDate: string;
-  status: 'Not Started' | 'In Progress' | 'Completed' | 'Overdue';
+  status: 'Not Started' | 'In Progress' | 'Completed' | 'Overdue' | 'Not Attempted';
   grade?: string;
   feedback?: string;
 }
@@ -309,6 +309,17 @@ const StudentAssignments = () => {
                       </Button>
                     )}
                   </div>
+                )}
+
+                {assignment.status === 'Not Attempted' && (
+                  <Button
+                    variant="warning"
+                    size="sm"
+                    className="ml-2"
+                    onClick={() => handleUpdateStatus(assignment.id, 'In Progress')}
+                  >
+                    Start Assignment
+                  </Button>
                 )}
               </div>
             </Card>

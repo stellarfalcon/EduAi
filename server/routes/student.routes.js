@@ -8,7 +8,12 @@ import {
   getDashboardStats,
   getStudentCourses,
   getUpcomingAssignments,
-  getAttendanceHistory
+  getAttendanceHistory,
+  markStudentAttendance,
+  getStudentAttendanceSelf,
+  getChatHistory,
+  getChatHistoryById,
+  saveChatHistory
 } from '../controllers/student.controller.js';
 import { assignmentStatusValidationRules, validateRequest } from '../middleware/validate.js';
 import { apiLimiter } from '../middleware/rateLimit.js';
@@ -48,5 +53,16 @@ router.get('/courses', authenticateUser, authorizeRoles(['student']), getStudent
 
 // Get attendance history
 router.get('/attendance/history', authenticateUser, authorizeRoles(['student']), getAttendanceHistory);
+
+// Mark student attendance
+router.post('/attendance/mark', authenticateUser, authorizeRoles(['student']), markStudentAttendance);
+
+// Check if student has already marked attendance for today
+router.get('/attendance/self', authenticateUser, authorizeRoles(['student']), getStudentAttendanceSelf);
+
+// Chat history endpoints
+router.get('/chat-history', authenticateUser, authorizeRoles(['student']), getChatHistory);
+router.get('/chat-history/:historyId', authenticateUser, authorizeRoles(['student']), getChatHistoryById);
+router.post('/chat-history', authenticateUser, authorizeRoles(['student']), saveChatHistory);
 
 export default router;

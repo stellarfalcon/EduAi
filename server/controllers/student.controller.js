@@ -3,10 +3,40 @@ import Assignment from '../models/Assignment.js';
 import Class from '../models/Class.js';
 import pool from '../db/config.js';
 
+// In-memory chat history store (replace with DB in production)
+let chatHistoryStore = [];
+
 export const getClasses = async (req, res) => {
   try {
-    const classes = await Class.findByStudent(req.user.userId);
-    return res.json(classes);
+    const userId = req.user.userId;
+    // Get the student's class_id
+    const classResult = await pool.query(
+      'SELECT class_id FROM user_profiles WHERE user_id = $1 AND class_id IS NOT NULL',
+      [userId]
+    );
+    if (!classResult.rows.length) {
+      return res.json([]); // No class assigned
+    }
+    const classId = classResult.rows[0].class_id;
+    // Get class name
+    const classInfo = await pool.query(
+      'SELECT class_id, class_name FROM classes WHERE class_id = $1',
+      [classId]
+    );
+    // Get all teachers for this class
+    const teachersResult = await pool.query(
+      `SELECT u.user_id, up.full_name, u.email
+       FROM class_courses cc
+       JOIN users u ON cc.teacher_id = u.user_id
+       JOIN user_profiles up ON u.user_id = up.user_id
+       WHERE cc.class_id = $1`,
+      [classId]
+    );
+    return res.json([{
+      class_id: classInfo.rows[0].class_id,
+      class_name: classInfo.rows[0].class_name,
+      teachers: teachersResult.rows
+    }]);
   } catch (error) {
     console.error('Error fetching student classes:', error);
     return res.status(500).json({ message: 'Server error' });
@@ -50,7 +80,7 @@ export const updateAssignmentStatus = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to update this assignment' });
     }
 
-    await Assignment.updateStatus(id, status);
+    await Assignment.updateStatus(id, req.user.userId, status);
     
     // Log the activity
     await logActivity({
@@ -71,11 +101,20 @@ export const getDashboardStats = async (req, res) => {
   try {
     const userId = req.user.userId;
 
-    // Get enrolled classes count
-    const enrolledClassesResult = await pool.query(
-      'SELECT COUNT(*) as count FROM user_profiles WHERE user_id = $1 AND class_id IS NOT NULL AND is_active_student = true',
+    // Get enrolled courses count (number of subjects for the student's class)
+    const classIdResult = await pool.query(
+      'SELECT class_id FROM user_profiles WHERE user_id = $1 AND class_id IS NOT NULL',
       [userId]
     );
+    let enrolledCourses = 0;
+    if (classIdResult.rows.length > 0) {
+      const classId = classIdResult.rows[0].class_id;
+      const coursesResult = await pool.query(
+        'SELECT COUNT(*) as count FROM class_courses WHERE class_id = $1',
+        [classId]
+      );
+      enrolledCourses = parseInt(coursesResult.rows[0].count, 10) || 0;
+    }
 
     // Get completed assignments count
     const completedAssignmentsResult = await pool.query(
@@ -104,7 +143,7 @@ export const getDashboardStats = async (req, res) => {
     );
 
     return res.json({
-      enrolledCourses: enrolledClassesResult.rows[0].count || 0,
+      enrolledCourses,
       completedAssignments: completed,
       attendance: attendanceResult.rows[0].percentage || 0,
       assignmentCompletionRate
@@ -186,4 +225,74 @@ export const getAttendanceHistory = async (req, res) => {
     console.error('Error fetching attendance history:', error);
     return res.status(500).json({ message: 'Server error' });
   }
+};
+
+export const markStudentAttendance = async (req, res) => {
+  try {
+    const studentId = req.user.userId;
+    const today = new Date().toISOString().split('T')[0];
+    // Check if already marked
+    const check = await pool.query(
+      `SELECT * FROM attendance WHERE user_id = $1 AND role = 'student' AND attendance_date = $2`,
+      [studentId, today]
+    );
+    if (check.rows.length > 0) {
+      return res.status(400).json({ message: 'Attendance already marked for today.' });
+    }
+    await pool.query(
+      `INSERT INTO attendance (user_id, role, attendance_date, attendance_status) VALUES ($1, 'student', $2, 1)`,
+      [studentId, today]
+    );
+    return res.json({ message: 'Attendance marked as present for today.' });
+  } catch (error) {
+    console.error('Error marking student attendance:', error);
+    return res.status(500).json({ message: 'Failed to mark attendance' });
+  }
+};
+
+// New: Check if student has already marked attendance for today
+export const getStudentAttendanceSelf = async (req, res) => {
+  try {
+    const studentId = req.user.userId;
+    const today = new Date().toISOString().split('T')[0];
+    const check = await pool.query(
+      `SELECT * FROM attendance WHERE user_id = $1 AND role = 'student' AND attendance_date = $2`,
+      [studentId, today]
+    );
+    return res.json({ marked: check.rows.length > 0 });
+  } catch (error) {
+    console.error('Error checking student attendance:', error);
+    return res.status(500).json({ message: 'Failed to check attendance' });
+  }
+};
+
+export const getChatHistory = async (req, res) => {
+  // Return all chat history for the current student
+  const userId = req.user.userId;
+  const history = chatHistoryStore.filter(item => item.userId === userId);
+  return res.json(history);
+};
+
+export const getChatHistoryById = async (req, res) => {
+  const userId = req.user.userId;
+  const { historyId } = req.params;
+  const item = chatHistoryStore.find(h => h.userId === userId && h.id === historyId);
+  if (!item) return res.status(404).json({ message: 'Not found' });
+  return res.json(item.messages || []);
+};
+
+export const saveChatHistory = async (req, res) => {
+  const userId = req.user.userId;
+  const { id, title, timestamp, preview } = req.body;
+  // Save a new chat history item
+  const newItem = {
+    id,
+    userId,
+    title,
+    timestamp,
+    preview,
+    messages: req.body.messages || []
+  };
+  chatHistoryStore.unshift(newItem);
+  return res.status(201).json(newItem);
 };

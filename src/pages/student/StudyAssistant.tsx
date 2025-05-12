@@ -59,7 +59,12 @@ const StudyAssistant = () => {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
         });
-        setChatHistory(response.data);
+        setChatHistory(
+          response.data.map((item: any) => ({
+            ...item,
+            timestamp: new Date(item.timestamp)
+          }))
+        );
       } catch (error) {
         console.error('Error fetching chat history:', error);
         toast.error('Failed to load chat history');
@@ -76,7 +81,12 @@ const StudyAssistant = () => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      setMessages(response.data);
+      setMessages(
+        response.data.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }))
+      );
     } catch (error) {
       console.error('Error loading chat history:', error);
       toast.error('Failed to load chat history');

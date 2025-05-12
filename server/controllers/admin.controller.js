@@ -297,8 +297,10 @@ export const getFilteredAttendance = async (req, res) => {
       SELECT 
         COUNT(CASE WHEN attendance_status = 1 THEN 1 END) as present_count,
         COUNT(*) as total_count
-      FROM attendance
-      WHERE 1=1
+      FROM attendance a
+      JOIN users u ON a.user_id = u.user_id
+      LEFT JOIN class_courses cc ON a.class_course_id = cc.id
+      WHERE 1=1 AND u.user_status = 1
     `;
     
     const queryParams = [];
@@ -306,7 +308,7 @@ export const getFilteredAttendance = async (req, res) => {
 
     // Add role filter
     if (role && role !== 'all') {
-      query += ` AND role = $${paramIndex}`;
+      query += ` AND a.role = $${paramIndex}`;
       queryParams.push(role);
       paramIndex++;
     }
@@ -320,7 +322,7 @@ export const getFilteredAttendance = async (req, res) => {
 
     // Add class filter
     if (classId) {
-      query += ` AND class_course_id = $${paramIndex}`;
+      query += ` AND cc.class_id = $${paramIndex}`;
       queryParams.push(classId);
       paramIndex++;
     }

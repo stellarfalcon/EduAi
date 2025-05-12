@@ -38,7 +38,6 @@ export const ROUTES = {
   ],
   TEACHER: [
     { name: 'Dashboard', path: '/teacher/dashboard', icon: 'LayoutDashboard' },
-    { name: 'Student Class Assignment', path: '/teacher/student-class-assignment', icon: 'Users' },
     { name: 'Lesson Planner', path: '/teacher/lesson-planner', icon: 'Book' },
     { name: 'Assignments', path: '/teacher/assignments', icon: 'FileText' },
   ],

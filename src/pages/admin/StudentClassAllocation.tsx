@@ -187,22 +187,7 @@ const StudentClassAllocation = () => {
                 )}
               </div>
 
-              <div className="mt-4 flex items-center justify-between text-sm">
-                <div className="flex items-center">
-                  <BarChart2 size={16} className="mr-2" />
-                  <span className={getPerformanceColor(student.performance)}>
-                    Performance: {student.performance ? `${student.performance}%` : 'N/A'}
-                  </span>
-                </div>
-                <div className="flex items-center">
-                  <Users size={16} className="mr-2" />
-                  <span className={getAttendanceColor(student.attendance)}>
-                    Attendance: {student.attendance ? `${student.attendance}%` : 'N/A'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="mt-4">
                 {student.class_id ? (
                   <Button
                     variant="danger"

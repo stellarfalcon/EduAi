@@ -422,16 +422,19 @@ const TeacherDashboard = () => {
                 ))}
               </select>
             </div>
-            <div className="flex-1 flex justify-center items-center">
-              <Pie 
-                data={filteredAttendanceData} 
+            <div className="flex-1 flex justify-center items-center" style={{ height: 220, maxWidth: 220, margin: '0 auto' }}>
+              <Pie
+                data={filteredAttendanceData}
                 options={{
+                  maintainAspectRatio: false,
                   plugins: {
                     legend: {
                       position: 'bottom',
                     },
                   },
                 }}
+                height={220}
+                width={220}
               />
             </div>
           </div>

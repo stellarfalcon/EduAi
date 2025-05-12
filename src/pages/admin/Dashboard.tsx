@@ -76,11 +76,10 @@ const AdminDashboard = () => {
     averageAttendance: 0,
   });
   
-  const [attendanceFilter, setAttendanceFilter] = useState<AttendanceFilter>({
+  const [attendanceFilter, setAttendanceFilter] = useState({
     role: 'all',
     userId: '',
-    classId: '',
-    timeRange: 'month'
+    classId: ''
   });
 
   const [classes, setClasses] = useState<Class[]>([]);
@@ -142,7 +141,10 @@ const AdminDashboard = () => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      setClasses(classesResponse.data);
+      setClasses(classesResponse.data.map((cls: any) => ({
+        id: cls.class_id || cls.id,
+        name: cls.class_name || cls.name
+      })));
 
       // Fetch users
       const usersResponse = await axios.get(`${API_URL}/admin/users`, {
@@ -150,7 +152,11 @@ const AdminDashboard = () => {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
       });
-      setUsers(usersResponse.data);
+      setUsers(usersResponse.data.map((user: any) => ({
+        id: user.user_id || user.id,
+        name: user.full_name || user.name,
+        role: user.role
+      })));
 
       console.log('Teachers array:', users);
 
@@ -433,50 +439,23 @@ const AdminDashboard = () => {
               
               {isFilterOpen && (
                 <div className="mt-4 p-4 bg-white/10 rounded-lg space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <select
-                      value={attendanceFilter.role}
-                      onChange={(e) => setAttendanceFilter(prev => ({ ...prev, role: e.target.value as AttendanceFilter['role'] }))}
-                      className="bg-white/20 text-white rounded-md px-3 py-2 text-sm"
-                    >
-                      <option value="all">All Roles</option>
-                      <option value="student">Students</option>
-                      <option value="teacher">Teachers</option>
-                    </select>
-                    
-                    <select
-                      value={attendanceFilter.timeRange}
-                      onChange={(e) => setAttendanceFilter(prev => ({ ...prev, timeRange: e.target.value as AttendanceFilter['timeRange'] }))}
-                      className="bg-white/20 text-white rounded-md px-3 py-2 text-sm"
-                    >
-                      <option value="week">This Week</option>
-                      <option value="month">This Month</option>
-                      <option value="semester">This Semester</option>
-                      <option value="year">This Year</option>
-                    </select>
-                  </div>
-                  
+                  <select
+                    value={attendanceFilter.role}
+                    onChange={(e) => setAttendanceFilter(prev => ({ ...prev, role: e.target.value as AttendanceFilter['role'] }))}
+                    className="border rounded px-2 py-1 w-full"
+                  >
+                    <option value="all">All Roles</option>
+                    <option value="student">Students</option>
+                    <option value="teacher">Teachers</option>
+                  </select>
                   <select
                     value={attendanceFilter.classId}
                     onChange={(e) => setAttendanceFilter(prev => ({ ...prev, classId: e.target.value }))}
-                    className="w-full bg-white/20 text-white rounded-md px-3 py-2 text-sm"
+                    className="border rounded px-2 py-1 w-full"
                   >
                     <option value="">All Classes</option>
-                    {classes.map((cls) => (
-                      <option key={cls.id} value={cls.id}>{cls.name}</option>
-                    ))}
-                  </select>
-                  
-                  <select
-                    value={attendanceFilter.userId}
-                    onChange={(e) => setAttendanceFilter(prev => ({ ...prev, userId: e.target.value }))}
-                    className="w-full bg-white/20 text-white rounded-md px-3 py-2 text-sm"
-                  >
-                    <option value="">All Users</option>
-                    {users
-                      .filter(user => attendanceFilter.role === 'all' || user.role === attendanceFilter.role)
-                      .map((user) => (
-                        <option key={user.id} value={user.id}>{user.name}</option>
+                    {classes.map((cls, idx) => (
+                      <option key={cls.id || idx} value={cls.id}>{cls.name}</option>
                     ))}
                   </select>
                 </div>
@@ -603,18 +582,6 @@ const AdminDashboard = () => {
                       <option key={cls.id} value={cls.id}>{cls.name}</option>
                     ))
               )}
-            </select>
-            <select
-              value={activityFilter.userId}
-              onChange={e => setActivityFilter(f => ({ ...f, userId: e.target.value }))}
-              className="border rounded px-2 py-1"
-            >
-              <option value="">All Users</option>
-              {users
-                .filter(user => activityFilter.role === 'all' || user.role === activityFilter.role)
-                .map(user => (
-                  <option key={user.id} value={user.id}>{user.name}</option>
-                ))}
             </select>
           </div>
           <div className="space-y-4 h-96 overflow-y-auto">

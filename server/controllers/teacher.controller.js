@@ -508,9 +508,15 @@ export const markTeacherAttendance = async (req, res) => {
     if (check.rows.length > 0) {
       return res.status(400).json({ message: 'Attendance already marked for today.' });
     }
+    // Get the first class_course_id for this teacher
+    const ccRes = await pool.query(
+      'SELECT id FROM class_courses WHERE teacher_id = $1 LIMIT 1',
+      [teacherId]
+    );
+    const classCourseId = ccRes.rows.length > 0 ? ccRes.rows[0].id : null;
     await pool.query(
-      `INSERT INTO attendance (user_id, role, attendance_date, attendance_status) VALUES ($1, 'teacher', $2, 1)`,
-      [teacherId, today]
+      `INSERT INTO attendance (user_id, role, attendance_date, attendance_status, class_course_id) VALUES ($1, 'teacher', $2, 1, $3)`,
+      [teacherId, today, classCourseId]
     );
     return res.json({ message: 'Attendance marked as present for today.' });
   } catch (error) {

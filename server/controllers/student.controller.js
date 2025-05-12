@@ -239,9 +239,24 @@ export const markStudentAttendance = async (req, res) => {
     if (check.rows.length > 0) {
       return res.status(400).json({ message: 'Attendance already marked for today.' });
     }
+    // Get student's class_id
+    const classRes = await pool.query(
+      'SELECT class_id FROM user_profiles WHERE user_id = $1 AND class_id IS NOT NULL',
+      [studentId]
+    );
+    if (!classRes.rows.length) {
+      return res.status(400).json({ message: 'Student is not assigned to a class.' });
+    }
+    const classId = classRes.rows[0].class_id;
+    // Get the first class_course_id for this class
+    const ccRes = await pool.query(
+      'SELECT id FROM class_courses WHERE class_id = $1 LIMIT 1',
+      [classId]
+    );
+    const classCourseId = ccRes.rows.length > 0 ? ccRes.rows[0].id : null;
     await pool.query(
-      `INSERT INTO attendance (user_id, role, attendance_date, attendance_status) VALUES ($1, 'student', $2, 1)`,
-      [studentId, today]
+      `INSERT INTO attendance (user_id, role, attendance_date, attendance_status, class_course_id) VALUES ($1, 'student', $2, 1, $3)`,
+      [studentId, today, classCourseId]
     );
     return res.json({ message: 'Attendance marked as present for today.' });
   } catch (error) {

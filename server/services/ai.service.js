@@ -99,7 +99,11 @@ Do not include any additional text, markdown, or explanations - ONLY the JSON re
     console.log('Raw Gemini Response:', response);
     
     try {
-      const cleanedResponse = response.replace(/^\`\`\`json\n|\`\`\`$/g, '').trim();
+      const cleanedResponse = response
+        .replace(/^\`\`\`json\n|\`\`\`$/g, '') // Remove markdown code block markers
+        .replace(/\n/g, ' ') // Replace newlines with spaces
+        .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+        .trim();
       const lessonPlan = JSON.parse(cleanedResponse);
       
       if (!lessonPlan.title || !Array.isArray(lessonPlan.objectives) || 
@@ -112,6 +116,8 @@ Do not include any additional text, markdown, or explanations - ONLY the JSON re
         activity.title && activity.description && activity.duration)) {
         throw new Error('Invalid activities structure');
       }
+
+      lessonPlan.assessment = lessonPlan.assessment.replace(/\n/g, ' ');
 
       return {
         ...lessonPlan,

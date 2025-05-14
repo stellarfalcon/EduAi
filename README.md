@@ -31,9 +31,9 @@ EduAi is an intelligent educational platform that leverages artificial intellige
 
 ```
 src/
-├── components/     # Reusable UI components
-├── pages/         # Role-based pages (admin, teacher, student)
-├── layouts/       # Layout components for different user roles
+├── components/   # Reusable UI components
+├── pages/        # Role-based pages (admin, teacher, student)
+├── layouts/      # Layout components for different user roles
 ├── api/          # API integration and services
 ├── context/      # React context providers
 └── config/       # Configuration files

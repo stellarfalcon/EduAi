@@ -2,6 +2,27 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import guardrailConfig from '../config/guardrails.js';
 import EnvironmentService from './env.service.js';
 
+function extractFirstJsonObject(text) {
+  const firstCurly = text.indexOf('{');
+  if (firstCurly === -1) throw new Error('No JSON object found in response');
+
+  let braceCount = 0;
+  let endIndex = -1;
+
+  for (let i = firstCurly; i < text.length; i++) {
+    if (text[i] === '{') braceCount++;
+    if (text[i] === '}') braceCount--;
+    if (braceCount === 0) {
+      endIndex = i + 1;
+      break;
+    }
+  }
+
+  if (endIndex === -1) throw new Error('Malformed JSON object');
+
+  return text.slice(firstCurly, endIndex);
+}
+
 export const validateContent = async (prompt) => {
   const env = EnvironmentService.getEnvWithDefaults();
   const genAI = new GoogleGenerativeAI(env.geminiApiKey);
@@ -91,15 +112,19 @@ IMPORTANT: Your response must be ONLY valid JSON that follows this exact structu
   "assessment": "string"
 }
 
-Do not include any additional text, markdown, or explanations - ONLY the JSON response.`;
+Do not include any additional text, markdown, or explanations - ONLY the JSON response.
+DO NOT omit any commas between fields. Even a single missing comma will make the response invalid.
+Return only a single JSON object (not multiple), and do not include any explanation, markdown formatting, or repeated outputs. 
+Just return one well-formatted JSON object as per the given schema.`;
 
   try {
     const result = await model.generateContent(prompt);
     const response = await result.response.text();
     console.log('Raw Gemini Response:', response);
+    const rawJson = extractFirstJsonObject(response);
     
     try {
-      const cleanedResponse = response
+      const cleanedResponse = rawJson
         .replace(/^\`\`\`json\n|\`\`\`$/g, '') // Remove markdown code block markers
         .replace(/\n/g, ' ') // Replace newlines with spaces
         .replace(/\s+/g, ' ') // Replace multiple spaces with single space

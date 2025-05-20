@@ -24,7 +24,7 @@ class DatabaseService {
           password VARCHAR(255) NOT NULL,
           role VARCHAR(50) NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          status VARCHAR(50),
+          status VARCHAR(50) default = 'pending',
           reviewed_by TEXT,
           reviewed_at TIMESTAMP WITH TIME ZONE,
           notes text NULL,

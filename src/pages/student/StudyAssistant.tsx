@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import { Bot, SendHorizonal, User, Book, Zap, FileText, RefreshCw, X, ArrowDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -6,6 +6,8 @@ import remarkGfm from 'remark-gfm';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import { generateAIResponse } from '../../api/ai';
+import axios from 'axios';
+import { API_URL } from '../../config/constants';
 
 interface Message {
   id: string;
@@ -21,6 +23,19 @@ interface HistoryItem {
   preview: string;
 }
 
+interface Tool {
+  id: string;
+  name: string;
+  icon: JSX.Element;
+  prompt: string;
+}
+
+const tools: Tool[] = [
+  { id: 'qa', name: 'Homework Help', icon: <Book size={20} />, prompt: 'I need help with my homework about ' },
+  { id: 'summarize', name: 'Summarize Text', icon: <FileText size={20} />, prompt: 'Please summarize the following text: ' },
+  { id: 'explain', name: 'Explain Concept', icon: <Zap size={20} />, prompt: 'Can you explain this concept in simple terms: ' },
+];
+
 const StudyAssistant = () => {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -34,26 +49,49 @@ const StudyAssistant = () => {
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
-  const [chatHistory, setChatHistory] = useState<HistoryItem[]>([
-    {
-      id: '1',
-      title: 'Photosynthesis Process',
-      timestamp: new Date(Date.now() - 86400000), // 1 day ago
-      preview: 'Can you explain the photosynthesis process?',
-    },
-    {
-      id: '2',
-      title: 'Quadratic Equations',
-      timestamp: new Date(Date.now() - 172800000), // 2 days ago
-      preview: 'How do I solve quadratic equations?',
-    },
-  ]);
-  
-  const tools = [
-    { id: 'qa', name: 'Homework Help', icon: <Book size={20} />, prompt: 'I need help with my homework about ' },
-    { id: 'summarize', name: 'Summarize Text', icon: <FileText size={20} />, prompt: 'Please summarize the following text: ' },
-    { id: 'explain', name: 'Explain Concept', icon: <Zap size={20} />, prompt: 'Can you explain this concept in simple terms: ' },
-  ];
+  const [chatHistory, setChatHistory] = useState<HistoryItem[]>([]);
+
+  useEffect(() => {
+    const fetchChatHistory = async () => {
+      try {
+        const response = await axios.get(`${API_URL}/student/chat-history`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        setChatHistory(
+          response.data.map((item: any) => ({
+            ...item,
+            timestamp: new Date(item.timestamp)
+          }))
+        );
+      } catch (error) {
+        console.error('Error fetching chat history:', error);
+        toast.error('Failed to load chat history');
+      }
+    };
+
+    fetchChatHistory();
+  }, []);
+
+  const handleLoadHistory = async (historyId: string) => {
+    try {
+      const response = await axios.get(`${API_URL}/student/chat-history/${historyId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      setMessages(
+        response.data.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }))
+      );
+    } catch (error) {
+      console.error('Error loading chat history:', error);
+      toast.error('Failed to load chat history');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,23 +121,34 @@ const StudyAssistant = () => {
       
       setMessages(prev => [...prev, assistantMessage]);
       
-      // Add to history if it's a new conversation
+      // Save to history if it's a new conversation
       if (messages.length <= 1) {
         const title = input.length > 25 ? input.substring(0, 25) + '...' : input;
-        setChatHistory(prev => [{
+        const newHistoryItem = {
           id: Date.now().toString(),
           title,
           timestamp: new Date(),
           preview: input,
-        }, ...prev]);
+        };
+        
+        // Save to backend
+        await axios.post(
+          `${API_URL}/student/chat-history`,
+          newHistoryItem,
+          {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+          }
+        );
+        
+        setChatHistory(prev => [newHistoryItem, ...prev]);
       }
     } catch (error: any) {
       console.error('Error sending message:', error);
       
-      // Extract detailed error message from the backend response
       const errorMsg = error.response?.data?.reason || error.message || 'Failed to send message. Please try again.';
       
-      // Add error message to the chat
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -108,14 +157,7 @@ const StudyAssistant = () => {
       };
       
       setMessages(prev => [...prev, errorMessage]);
-      toast.error(errorMsg, {
-        position: "top-right",
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
+      toast.error(errorMsg);
     } finally {
       setIsProcessing(false);
     }
@@ -135,36 +177,6 @@ const StudyAssistant = () => {
         timestamp: new Date(),
       },
     ]);
-  };
-
-  const handleLoadHistory = (historyId: string) => {
-    // In a real application, this would load the conversation from history
-    const history = chatHistory.find(h => h.id === historyId);
-    
-    if (history) {
-      setMessages([
-        {
-          id: '1',
-          role: 'assistant',
-          content: 'Hello! I\'m your AI study assistant. How can I help you with your studies today?',
-          timestamp: new Date(history.timestamp),
-        },
-        {
-          id: '2',
-          role: 'user',
-          content: history.preview,
-          timestamp: new Date(history.timestamp),
-        },
-        {
-          id: '3',
-          role: 'assistant',
-          content: history.id === '1' 
-            ? 'Photosynthesis is the process by which green plants and some other organisms use sunlight to synthesize foods with the help of chlorophyll. During photosynthesis, plants take in carbon dioxide (CO2) and water (H2O) from the air and soil. Within the plant cell, the water is oxidized, meaning it loses electrons, while the carbon dioxide is reduced, meaning it gains electrons. This transforms the water into oxygen and the carbon dioxide into glucose (a simple sugar). The plant then releases the oxygen back into the air, and stores energy as glucose molecules. The equation for photosynthesis is: 6CO2 + 6H2O + light energy → C6H12O6 + 6O2'
-            : 'A quadratic equation has the form ax² + bx + c = 0 where a ≠ 0. To solve a quadratic equation, you can use the quadratic formula:\n\nx = (-b ± √(b² - 4ac)) / 2a\n\nWhere:\n- a, b, and c are the coefficients in the equation\n- The ± symbol indicates that there are two solutions: one with addition and one with subtraction\n\nFor example, to solve x² + 5x + 6 = 0:\na = 1, b = 5, c = 6\n\nx = (-5 ± √(25 - 24)) / 2\nx = (-5 ± √1) / 2\nx = (-5 ± 1) / 2\n\nSo x = -3 or x = -2',
-          timestamp: new Date(history.timestamp.getTime() + 2000),
-        },
-      ]);
-    }
   };
 
   const formatTimestamp = (date: Date) => {

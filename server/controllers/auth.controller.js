@@ -4,9 +4,9 @@ import User from '../models/User.js';
 import RegistrationRequest from '../models/RegistrationRequest.js';
 
 export const register = async (req, res) => {
-  const { email, password, role } = req.body;
+  const { email, password, role, fullName, contactNumber } = req.body;
   
-  if (!email || !password || !role) {
+  if (!email || !password || !role || !fullName) {
     return res.status(400).json({ message: 'All fields are required' });
   }
   
@@ -32,7 +32,7 @@ export const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
     
     // Create registration request
-    await RegistrationRequest.create(email, hashedPassword, role);
+    await RegistrationRequest.create(email, hashedPassword, role, fullName, contactNumber);
     
     return res.status(201).json({ message: 'Registration request submitted successfully' });
   } catch (error) {

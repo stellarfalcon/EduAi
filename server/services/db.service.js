@@ -19,15 +19,21 @@ class DatabaseService {
       // Create registration_requests table
       await pool.query(`
         CREATE TABLE IF NOT EXISTS registration_requests (
-          id SERIAL PRIMARY KEY,
+          id SERIAL,
           username VARCHAR(255) NOT NULL,
           password VARCHAR(255) NOT NULL,
-          role VARCHAR(50) NOT NULL CHECK (role IN ('student', 'teacher')),
+          role VARCHAR(50) NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+          status VARCHAR(50),
           reviewed_by TEXT,
           reviewed_at TIMESTAMP WITH TIME ZONE,
-          notes TEXT
+          notes text NULL,
+          full_name text NULL,
+          contact_number text NULL,
+          CONSTRAINT registration_requests_pkey PRIMARY KEY (id),
+          CONSTRAINT registration_requests_role_check CHECK ((role = ANY (ARRAY['student'::text, 'teacher'::text]))),
+          CONSTRAINT registration_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text]))),
+          CONSTRAINT registration_requests_username_key UNIQUE (username)
         );
       `);
 
@@ -77,6 +83,7 @@ class DatabaseService {
           title TEXT NOT NULL,
           description TEXT,
           class_course_id INTEGER REFERENCES class_courses(id),
+          created_by_teacher_id INTEGER REFERENCES users(user_id),
           created_by INTEGER REFERENCES users(user_id),
           due_date DATE NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP  
@@ -92,7 +99,8 @@ class DatabaseService {
           status VARCHAR(20) NOT NULL CHECK (
             status IN ('Not Attempted', 'Pending', 'In Progress', 'Completed')
           ),
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT assignment_key UNIQUE (assignment_id, student_id)
         );
       `);
 

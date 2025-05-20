@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();  // Ensure env is loaded even if index.js hasn't yet
+
 class EnvironmentService {
   static validateEnv() {
     const requiredEnvVars = [
@@ -39,16 +42,16 @@ class EnvironmentService {
 
   static getEnvWithDefaults() {
     return {
-      port: parseInt(process.env.PORT) || 5000,
-      jwtSecret: process.env.JWT_SECRET || 'your-secret-key',
+      port: parseInt(process.env.PORT),
+      jwtSecret: process.env.JWT_SECRET,
       geminiApiKey: process.env.GEMINI_API_KEY,
       db: {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT) || 5432,
-        database: process.env.DB_NAME || 'postgres',
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || '68NITec@2011',
-        schema: process.env.DB_SCHEMA || 'edu_platform'
+        host: process.env.DB_HOST,
+        port: parseInt(process.env.DB_PORT),
+        database: process.env.DB_NAME,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        schema: process.env.DB_SCHEMA
       },
       nodeEnv: process.env.NODE_ENV || 'development'
     };

@@ -11,6 +11,8 @@ const Register = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState('student');
   const [isLoading, setIsLoading] = useState(false);
+  const [fullName, setFullName] = useState('');
+  const [contactNumber, setContactNumber] = useState('');
   
   const { register } = useContext(AuthContext);
   const navigate = useNavigate();
@@ -18,7 +20,7 @@ const Register = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password || !confirmPassword) {
+    if (!fullName || !email || !password || !confirmPassword) {
       toast.error('Please fill in all fields');
       return;
     }
@@ -50,7 +52,7 @@ const Register = () => {
     setIsLoading(true);
     
     try {
-      await register(email, password, role);
+      await register(email, password, role, fullName, contactNumber);
       toast.success('Registration request submitted successfully. Please wait for admin approval.');
       navigate('/login');
     } catch (error: any) {
@@ -65,6 +67,21 @@ const Register = () => {
       <h2 className="text-xl font-semibold text-center mb-6">Create Account</h2>
       
       <form onSubmit={handleSubmit}>
+        <div className="mb-4">
+          <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
+            Full Name
+          </label>
+          <input
+            id="fullName"
+            type="text"
+            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            placeholder="Enter your full name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+          />
+        </div>
+        
         <div className="mb-4">
           <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
             Email Address
@@ -136,6 +153,20 @@ const Register = () => {
           <p className="mt-1 text-xs text-gray-500">
             Note: Admin accounts can only be created by existing admins.
           </p>
+        </div>
+        
+        <div className="mb-4">
+          <label htmlFor="contactNumber" className="block text-sm font-medium text-gray-700 mb-1">
+            Contact Number (optional)
+          </label>
+          <input
+            id="contactNumber"
+            type="text"
+            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            placeholder="Enter your contact number"
+            value={contactNumber}
+            onChange={(e) => setContactNumber(e.target.value)}
+          />
         </div>
         
         <Button

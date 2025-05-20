@@ -13,6 +13,8 @@ import AdminDashboard from './pages/admin/Dashboard';
 import RegistrationRequests from './pages/admin/RegistrationRequests';
 import AdminUsers from './pages/admin/Users';
 import AdminLayout from './layouts/AdminLayout';
+import TeacherAssignments from './pages/admin/TeacherAssignments';
+import StudentClassAllocation from './pages/admin/StudentClassAllocation';
 
 // Teacher components
 import TeacherDashboard from './pages/teacher/Dashboard';
@@ -53,6 +55,8 @@ function App() {
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/admin/registration-requests" element={<RegistrationRequests />} />
             <Route path="/admin/users" element={<AdminUsers />} />
+            <Route path="/admin/teacher-assignments" element={<TeacherAssignments />} />
+            <Route path="/admin/student-class-allocation" element={<StudentClassAllocation />} />
           </Route>
 
           {/* Teacher Routes */}

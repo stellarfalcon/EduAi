@@ -10,20 +10,29 @@ import {
   getDashboardStats,
   getRecentActivities,
   getToolUsageStats,
-  getActivityTrends
+  getActivityTrends,
+  getFilteredAttendance,
+  assignTeacherToClassCourse,
+  getAllClasses,
+  getAllCourses,
+  getAllTeacherAssignments,
+  deleteTeacherAssignment,
+  updateTeacherAssignment,
+  allocateStudentToClass,
+  removeStudentAllocation
 } from '../controllers/admin.controller.js';
-import { apiLimiter } from '../middleware/rateLimit.js';
 
 const router = Router();
 
-// Apply API rate limiter to all admin routes
-router.use(apiLimiter);
+// Remove or comment out the rate limiter for admin routes
+// router.use(apiLimiter);
 
 // Dashboard routes
 router.get('/dashboard/stats', authenticateUser, authorizeRoles(['admin']), getDashboardStats);
 router.get('/dashboard/activities', authenticateUser, authorizeRoles(['admin']), getRecentActivities);
 router.get('/dashboard/tool-usage', authenticateUser, authorizeRoles(['admin']), getToolUsageStats);
 router.get('/dashboard/activity-trends', authenticateUser, authorizeRoles(['admin']), getActivityTrends);
+router.get('/dashboard/attendance', authenticateUser, authorizeRoles(['admin']), getFilteredAttendance);
 
 // Registration requests routes
 router.get('/registration-requests', authenticateUser, authorizeRoles(['admin']), getRegistrationRequests);
@@ -54,5 +63,17 @@ router.put(
   authorizeRoles(['admin']),
   reactivateUser
 );
+
+// Teacher/class/course assignment
+router.post('/assign-teacher', authenticateUser, authorizeRoles(['admin']), assignTeacherToClassCourse);
+router.get('/classes', authenticateUser, authorizeRoles(['admin']), getAllClasses);
+router.get('/courses', authenticateUser, authorizeRoles(['admin']), getAllCourses);
+router.get('/teacher-assignments', authenticateUser, authorizeRoles(['admin']), getAllTeacherAssignments);
+router.delete('/teacher-assignments/:id', authenticateUser, authorizeRoles(['admin']), deleteTeacherAssignment);
+router.put('/teacher-assignments/:id', authenticateUser, authorizeRoles(['admin']), updateTeacherAssignment);
+
+// Student/class allocation
+router.post('/allocate-student', authenticateUser, authorizeRoles(['admin']), allocateStudentToClass);
+router.delete('/remove-student-allocation/:studentId', authenticateUser, authorizeRoles(['admin']), removeStudentAllocation);
 
 export default router;
